@@ -50,7 +50,15 @@ type SimpleOrchestrator struct {
 }
 
 // NewSimpleOrchestrator создаёт “склеенный” оркестратор на dummy-подсистемах и in-memory TransactionStore.
-func NewSimpleOrchestrator() *SimpleOrchestrator {
+// NewSimpleOrchestrator создаёт “склеенный” оркестратор на dummy-подсистемах.
+// Если TransactionStore не передан, используется in-memory хранилище для локального запуска.
+func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestrator {
+	store := contracts.TransactionStore(storage.NewInMemoryTransactionStore())
+
+	if len(stores) > 0 && stores[0] != nil {
+		store = stores[0]
+	}
+
 	// Containers
 	sm := newInMemoryStateManager()
 	rt := newSimplePaymentRouter()
@@ -66,7 +74,7 @@ func NewSimpleOrchestrator() *SimpleOrchestrator {
 		adapter:       adapter.NewDummyAdapter("DUMMY"),
 		notifications: notifications.NewDummyNotifications(),
 
-		store:  storage.NewInMemoryTransactionStore(),
+		store:  store,
 		logger: noOpLogger{},
 
 		stateManager: sm,

@@ -7,14 +7,16 @@ import (
 	"os"
 	"strings"
 	"time"
+	
 
 	httptransport "github.com/go-kit/kit/transport/http"
 
 	"github.com/go-kit/kit/endpoint"
 	kitlog "github.com/go-kit/kit/log"
 
-	payments "payment-gateway/internal/httpapi/payments"
+	payments "payment-gateway/internal/httpapi/payments" 
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
+	"payment-gateway/internal/subsystems/storage"
 )
 
 type healthResponse struct {
@@ -59,8 +61,23 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthHandler)
 
-	orchestrator := orchestratorSimple.NewSimpleOrchestrator()
-	mux.Handle("/payments", payments.NewCreatePaymentHandler(orchestrator, logger))
+	store := storage.NewInMemoryTransactionStore()
+
+if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+	pgStore, err := storage.NewPostgresTransactionStoreAsContract(context.Background(), dsn)
+	if err != nil {
+		logger.Log("level", "error", "msg", "failed to connect postgres", "err", err.Error())
+		os.Exit(1)
+	}
+
+	store = pgStore
+	logger.Log("level", "info", "msg", "postgres transaction store connected")
+} else {
+	logger.Log("level", "warn", "msg", "DATABASE_URL is empty; using in-memory transaction store")
+}
+
+orchestrator := orchestratorSimple.NewSimpleOrchestrator(store)
+mux.Handle("/payments", payments.NewCreatePaymentHandler(orchestrator, logger))
 
 	// Статика (web/index.html и web/static/*)
 	mux.Handle("/", http.FileServer(http.Dir("web")))

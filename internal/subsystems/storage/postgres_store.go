@@ -8,6 +8,7 @@ import (
 
 	"payment-gateway/internal/contracts"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -27,16 +28,14 @@ func NewPostgresTransactionStore(ctx context.Context, dsn string) (*PostgresTran
 
 	s := &PostgresTransactionStore{pool: pool}
 	if err := s.ensureSchema(ctx); err != nil {
-	pool.Close()
-	return nil, err
+		pool.Close()
+		return nil, err
 	}
 
 	return s, nil
 }
 
 func (s *PostgresTransactionStore) ensureSchema(ctx context.Context) error {
-	// Для диплома: таблица хранит итоговый статус и закешированный payload ответа
-	// по идемпотентности (merchant_id, idempotency_key).
 	_, err := s.pool.Exec(ctx, `
 CREATE TABLE IF NOT EXISTS payment_transactions (
   id BIGSERIAL PRIMARY KEY,
@@ -49,6 +48,7 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (merchant_id, idempotency_key)
 );
+
 CREATE INDEX IF NOT EXISTS idx_payment_transactions_merchant_payment
   ON payment_transactions (merchant_id, payment_id);
 `)
@@ -61,6 +61,7 @@ func NewPostgresTransactionStoreAsContract(ctx context.Context, dsn string) (con
 	if err != nil {
 		return nil, err
 	}
+
 	return s, nil
 }
 
@@ -77,9 +78,8 @@ func (s *PostgresTransactionStore) Save(
 		return errors.New("merchantID and idempotencyKey are required")
 	}
 
-	// payload_json должен быть валидным JSON.
 	if payloadJSON == "" {
-		payloadJSON = `{}` // гарантируем JSONB
+		payloadJSON = `{}`
 	} else {
 		var tmp interface{}
 		if err := json.Unmarshal([]byte(payloadJSON), &tmp); err != nil {
@@ -89,7 +89,12 @@ func (s *PostgresTransactionStore) Save(
 
 	_, err := s.pool.Exec(ctx, `
 INSERT INTO payment_transactions (
-  merchant_id, payment_id, idempotency_key, status, payload_json, updated_at
+  merchant_id,
+  payment_id,
+  idempotency_key,
+  status,
+  payload_json,
+  updated_at
 ) VALUES ($1, $2, $3, $4, $5::jsonb, $6)
 ON CONFLICT (merchant_id, idempotency_key) DO UPDATE
 SET
@@ -112,6 +117,7 @@ func (s *PostgresTransactionStore) GetByIdempotencyKey(
 	}
 
 	var payload map[string]any
+
 	err = s.pool.QueryRow(ctx, `
 SELECT status, payload_json
 FROM payment_transactions
@@ -120,14 +126,13 @@ LIMIT 1
 `, merchantID, idempotencyKey).Scan(&status, &payload)
 
 	if err != nil {
-		// pgx возвращает pgx.ErrNoRows — но без прямого импорта оставим через текст:
-		// однако для корректности нужно импортировать pgx.
-		// Поэтому ниже делаем вариант через errors.Is.
-		// (pgxpool/pgxpool uses pgx; ErrNoRows is in pgx.)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", false, nil
+		}
+
 		return "", "", false, err
 	}
 
-	// payloadJSON: маршалим обратно.
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return "", "", false, err
