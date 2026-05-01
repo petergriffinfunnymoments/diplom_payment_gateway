@@ -32,7 +32,7 @@ func (a *DummyAdapter) Send(ctx context.Context, token string, req dto.CreatePay
 	return contracts.AdapterResult{
 		ExternalTransactionID: extID,
 		PaymentSystem:         a.paymentSystem,
-		Status:                "SUCCESS",
+		Status:                string(dto.StatusCaptured),
 		ErrorMessage:          "",
 	}, nil
 }
