@@ -158,3 +158,16 @@ hr{
   max-height: 360px;
   margin-top: 10px;
 }
+
+/* Добавь в конец web/static/styles.css */
+
+input.invalid,
+select.invalid {
+  border-color: rgba(255,90,106,.85);
+  background: rgba(255,90,106,.10);
+}
+
+input:focus,
+select:focus {
+  border-color: rgba(79,140,255,.85);
+}

@@ -27,6 +27,20 @@ const els = {
   walletId: document.getElementById('walletId'),
 };
 
+const PAYMENT_METHODS = {
+  SBP: 'СБП',
+  CARD: 'Банковская карта',
+  WALLET: 'Цифровой кошелек',
+};
+
+const validators = {
+  phone: /^\+7\d{10}$/,
+  cardNumber: /^\d{16,19}$/,
+  cardDate: /^(0[1-9]|1[0-2])\/\d{2}$/,
+  cvv: /^\d{3}$/,
+  walletId: /^[A-Za-z0-9_-]{3,64}$/,
+};
+
 function showStatus(message, isError = false) {
   els.statusBox.classList.remove('hidden');
   els.statusBox.classList.toggle('error', !!isError);
@@ -35,6 +49,7 @@ function showStatus(message, isError = false) {
 
 function hideStatus() {
   els.statusBox.classList.add('hidden');
+  els.statusBox.textContent = '';
 }
 
 function showResponse(obj) {
@@ -46,7 +61,7 @@ function getSelectedPaymentMethod() {
   for (const r of els.paymentMethodRadios) {
     if (r.checked) return r.value;
   }
-  return 'СБП';
+  return PAYMENT_METHODS.SBP;
 }
 
 function nowIso() {
@@ -56,7 +71,8 @@ function nowIso() {
 
 function safeUUID() {
   if (crypto && crypto.randomUUID) return crypto.randomUUID();
-  // fallback (student demo)
+
+  // fallback для учебного демо.
   return 'uuid-' + Math.random().toString(16).slice(2) + '-' + Date.now().toString(16);
 }
 
@@ -64,14 +80,211 @@ function generatePaymentId() {
   return 'pay_' + Math.random().toString(16).slice(2);
 }
 
+function digitsOnly(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizePhoneInput(value) {
+  const raw = String(value || '').trim();
+  const digits = digitsOnly(raw);
+
+  if (!digits) return '';
+
+  // Пользователь может начать ввод с 8, 7 или сразу с 9XXXXXXXXX.
+  if (digits.startsWith('8')) return '+7' + digits.slice(1, 11);
+  if (digits.startsWith('7')) return '+7' + digits.slice(1, 11);
+  if (digits.startsWith('9')) return '+7' + digits.slice(0, 10);
+
+  return '+7' + digits.slice(0, 10);
+}
+
+function normalizeCardDateInput(value) {
+  const digits = digitsOnly(value).slice(0, 4);
+
+  if (digits.length <= 2) return digits;
+
+  return digits.slice(0, 2) + '/' + digits.slice(2);
+}
+
+function setInvalid(input, message) {
+  input.setCustomValidity(message);
+  input.classList.add('invalid');
+}
+
+function setValid(input) {
+  input.setCustomValidity('');
+  input.classList.remove('invalid');
+}
+
+function validateOptionalPhone(input, label) {
+  const value = input.value.trim();
+
+  if (!value) {
+    setValid(input);
+    return true;
+  }
+
+  if (!validators.phone.test(value)) {
+    setInvalid(input, `${label} должен быть в формате +79991234567`);
+    return false;
+  }
+
+  setValid(input);
+  return true;
+}
+
+function isFutureCardDate(value) {
+  if (!validators.cardDate.test(value)) return false;
+
+  const [monthRaw, yearRaw] = value.split('/');
+  const month = Number(monthRaw);
+  const year = 2000 + Number(yearRaw);
+
+  // Карта действительна до конца указанного месяца.
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const cardNextMonthStart = new Date(year, month, 1);
+
+  return cardNextMonthStart > currentMonthStart;
+}
+
+function luhnCheck(cardNumber) {
+  let sum = 0;
+  let shouldDouble = false;
+
+  for (let i = cardNumber.length - 1; i >= 0; i -= 1) {
+    let digit = Number(cardNumber[i]);
+
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+
+  return sum % 10 === 0;
+}
+
+function validateForm() {
+  const method = getSelectedPaymentMethod();
+  const errors = [];
+
+  // Сначала очищаем старые ошибки.
+  [
+    els.amount,
+    els.description,
+    els.email,
+    els.phone,
+    els.sbpPhone,
+    els.cardNumber,
+    els.cardDate,
+    els.cvv,
+    els.walletId,
+  ].forEach(setValid);
+
+  const amount = Number(els.amount.value);
+
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000) {
+    setInvalid(els.amount, 'Сумма должна быть больше 0 и не больше 1 000 000 RUB');
+    errors.push('Сумма должна быть больше 0 и не больше 1 000 000 RUB.');
+  }
+
+  if (els.description.value.trim().length < 3) {
+    setInvalid(els.description, 'Описание должно содержать минимум 3 символа');
+    errors.push('Описание должно содержать минимум 3 символа.');
+  }
+
+  if (els.email.value.trim() && !els.email.checkValidity()) {
+    setInvalid(els.email, 'Введите email в формате customer@example.com');
+    errors.push('Email указан некорректно.');
+  }
+
+  if (!validateOptionalPhone(els.phone, 'Телефон')) {
+    errors.push('Телефон должен быть в формате +79991234567.');
+  }
+
+  if (method === PAYMENT_METHODS.SBP) {
+    if (!els.sbpPhone.value.trim()) {
+      setInvalid(els.sbpPhone, 'Для СБП обязательно укажите телефон');
+      errors.push('Для СБП обязательно укажите телефон.');
+    } else if (!validateOptionalPhone(els.sbpPhone, 'Телефон для СБП')) {
+      errors.push('Телефон для СБП должен быть в формате +79991234567.');
+    }
+  }
+
+  if (method === PAYMENT_METHODS.CARD) {
+    const cardNumber = digitsOnly(els.cardNumber.value);
+    els.cardNumber.value = cardNumber;
+
+    if (!validators.cardNumber.test(cardNumber)) {
+      setInvalid(els.cardNumber, 'Номер карты должен содержать от 16 до 19 цифр');
+      errors.push('Номер карты должен содержать от 16 до 19 цифр.');
+    } else if (!luhnCheck(cardNumber)) {
+      setInvalid(els.cardNumber, 'Номер карты не прошел проверку по алгоритму Луна');
+      errors.push('Номер карты не прошел проверку по алгоритму Луна.');
+    }
+
+    if (!validators.cardDate.test(els.cardDate.value)) {
+      setInvalid(els.cardDate, 'Срок карты должен быть в формате ММ/ГГ');
+      errors.push('Срок карты должен быть в формате ММ/ГГ.');
+    } else if (!isFutureCardDate(els.cardDate.value)) {
+      setInvalid(els.cardDate, 'Срок действия карты истек');
+      errors.push('Срок действия карты истек.');
+    }
+
+    if (!validators.cvv.test(els.cvv.value)) {
+      setInvalid(els.cvv, 'CVV должен содержать ровно 3 цифры');
+      errors.push('CVV должен содержать ровно 3 цифры.');
+    }
+  }
+
+  if (method === PAYMENT_METHODS.WALLET) {
+    if (!validators.walletId.test(els.walletId.value.trim())) {
+      setInvalid(els.walletId, 'ID кошелька: латинские буквы, цифры, _ и -, от 3 до 64 символов');
+      errors.push('ID кошелька может содержать латинские буквы, цифры, _ и -, от 3 до 64 символов.');
+    }
+  }
+
+  if (errors.length > 0) {
+    showStatus(errors[0], true);
+
+    const firstInvalid = els.form.querySelector('.invalid');
+
+    if (firstInvalid) {
+      firstInvalid.focus();
+      firstInvalid.reportValidity();
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
 function setMethodFieldsVisibility(method) {
   const sbpFields = document.getElementById('sbpFields');
   const cardFields = document.getElementById('cardFields');
   const walletFields = document.getElementById('walletFields');
 
-  sbpFields.classList.toggle('hidden', method !== 'СБП');
-  cardFields.classList.toggle('hidden', method !== 'Банковская карта');
-  walletFields.classList.toggle('hidden', method !== 'Цифровой кошелек');
+  sbpFields.classList.toggle('hidden', method !== PAYMENT_METHODS.SBP);
+  cardFields.classList.toggle('hidden', method !== PAYMENT_METHODS.CARD);
+  walletFields.classList.toggle('hidden', method !== PAYMENT_METHODS.WALLET);
+
+  // Required включаем только для полей выбранного способа оплаты.
+  els.sbpPhone.required = method === PAYMENT_METHODS.SBP;
+
+  els.cardNumber.required = method === PAYMENT_METHODS.CARD;
+  els.cardDate.required = method === PAYMENT_METHODS.CARD;
+  els.cvv.required = method === PAYMENT_METHODS.CARD;
+
+  els.walletId.required = method === PAYMENT_METHODS.WALLET;
+
+  // Скрытые поля не должны блокировать отправку формы.
+  [els.sbpPhone, els.cardNumber, els.cardDate, els.cvv, els.walletId].forEach(setValid);
+
+  hideStatus();
 }
 
 function buildRequestPayload() {
@@ -95,32 +308,29 @@ function buildRequestPayload() {
         type: paymentMethod,
       },
       customer_data: {
-        email: els.email.value || undefined,
-        phone: els.phone.value || undefined,
+        email: els.email.value.trim() || undefined,
+        phone: els.phone.value.trim() || undefined,
 
-        // SBP
-        // (вместо отдельного поля мы кладём phone)
-        // Go omitempty сам уберёт пустые строки
+        // Go omitempty сам уберёт пустые строки.
         card_number: undefined,
         card_date: undefined,
         CVV_code: undefined,
         digital_wallet_id: undefined,
       },
       created_at: nowIso(),
-      description: els.description.value || '',
+      description: els.description.value.trim(),
     },
   };
 
-  // Заполняем метод-специфичные поля
-  if (paymentMethod === 'СБП') {
-    base.payment_info.customer_data.phone = els.sbpPhone.value || els.phone.value || undefined;
-  } else if (paymentMethod === 'Банковская карта') {
-    base.payment_info.customer_data.card_number = els.cardNumber.value || undefined;
-    base.payment_info.customer_data.card_date = els.cardDate.value || undefined;
-    base.payment_info.customer_data.CVV_code = els.cvv.value || undefined;
-    // телефон оставляем как в общем поле, если заполнен
-  } else if (paymentMethod === 'Цифровой кошелек') {
-    base.payment_info.customer_data.digital_wallet_id = els.walletId.value || undefined;
+  // Заполняем метод-специфичные поля.
+  if (paymentMethod === PAYMENT_METHODS.SBP) {
+    base.payment_info.customer_data.phone = els.sbpPhone.value.trim() || els.phone.value.trim() || undefined;
+  } else if (paymentMethod === PAYMENT_METHODS.CARD) {
+    base.payment_info.customer_data.card_number = digitsOnly(els.cardNumber.value);
+    base.payment_info.customer_data.card_date = els.cardDate.value.trim();
+    base.payment_info.customer_data.CVV_code = els.cvv.value.trim();
+  } else if (paymentMethod === PAYMENT_METHODS.WALLET) {
+    base.payment_info.customer_data.digital_wallet_id = els.walletId.value.trim();
   }
 
   return base;
@@ -130,6 +340,8 @@ async function submitPayment() {
   hideStatus();
   els.responseBox.classList.add('hidden');
 
+  if (!validateForm()) return;
+
   const payload = buildRequestPayload();
 
   els.payBtn.disabled = true;
@@ -138,20 +350,26 @@ async function submitPayment() {
   try {
     const res = await fetch('/payments', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+      },
       body: JSON.stringify(payload),
     });
 
     const text = await res.text();
+
     let data;
+
     try {
       data = JSON.parse(text);
     } catch {
-      data = { raw: text };
+      data = {
+        raw: text,
+      };
     }
 
-    if (!res.ok) {
-      showStatus(`Ошибка HTTP ${res.status}`, true);
+    if (!res.ok || data?.error) {
+      showStatus(data?.error?.message || `Ошибка HTTP ${res.status}`, true);
       showResponse(data);
       return;
     }
@@ -166,9 +384,39 @@ async function submitPayment() {
   }
 }
 
+function wireInputFilters() {
+  [els.phone, els.sbpPhone].forEach((input) => {
+    input.addEventListener('input', () => {
+      input.value = normalizePhoneInput(input.value);
+      validateOptionalPhone(input, input === els.sbpPhone ? 'Телефон для СБП' : 'Телефон');
+    });
+  });
+
+  els.cardNumber.addEventListener('input', () => {
+    els.cardNumber.value = digitsOnly(els.cardNumber.value).slice(0, 19);
+    setValid(els.cardNumber);
+  });
+
+  els.cardDate.addEventListener('input', () => {
+    els.cardDate.value = normalizeCardDateInput(els.cardDate.value);
+    setValid(els.cardDate);
+  });
+
+  els.cvv.addEventListener('input', () => {
+    els.cvv.value = digitsOnly(els.cvv.value).slice(0, 3);
+    setValid(els.cvv);
+  });
+
+  els.walletId.addEventListener('input', () => {
+    els.walletId.value = els.walletId.value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+    setValid(els.walletId);
+  });
+}
+
 function wireUI() {
   // initial visibility
   setMethodFieldsVisibility(getSelectedPaymentMethod());
+  wireInputFilters();
 
   els.paymentMethodRadios.forEach((r) => {
     r.addEventListener('change', () => setMethodFieldsVisibility(getSelectedPaymentMethod()));
@@ -193,6 +441,18 @@ function wireUI() {
     els.cardDate.value = '12/29';
     els.cvv.value = '123';
     els.walletId.value = 'wallet_123';
+
+    [
+      els.amount,
+      els.description,
+      els.email,
+      els.phone,
+      els.sbpPhone,
+      els.cardNumber,
+      els.cardDate,
+      els.cvv,
+      els.walletId,
+    ].forEach(setValid);
 
     showStatus('Демо-данные заполнены');
     els.responseBox.classList.add('hidden');
