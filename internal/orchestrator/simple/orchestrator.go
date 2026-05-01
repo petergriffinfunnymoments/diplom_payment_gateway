@@ -9,33 +9,18 @@ import (
 
 	"payment-gateway/internal/contracts"
 	"payment-gateway/internal/dto"
-	"payment-gateway/internal/subsystems/antifraud"
 	"payment-gateway/internal/subsystems/adapter"
+	"payment-gateway/internal/subsystems/antifraud"
 	"payment-gateway/internal/subsystems/notifications"
 	"payment-gateway/internal/subsystems/storage"
 	"payment-gateway/internal/subsystems/tokenizer"
 	"payment-gateway/internal/subsystems/validator"
 )
 
-const (
-	statusCaptured = "SUCCESS"
-	statusFailed  = "FAILED"
-	statusPending = "PENDING"
-)
-
-type noOpLogger struct{}
-
-func (l noOpLogger) Log(ctx context.Context, event contracts.PaymentEvent) error {
-	_ = ctx
-	_ = event
-	return nil
-}
-
 type SimpleOrchestrator struct {
 	validator     contracts.PaymentValidator
 	antiFraud     contracts.AntiFraud
 	tokenizer     contracts.Tokenizer
-	adapter       contracts.PaymentAdapter
 	notifications contracts.Notifications
 
 	store  contracts.TransactionStore
@@ -49,31 +34,28 @@ type SimpleOrchestrator struct {
 	callback     contracts.CallbackHandler
 }
 
-// NewSimpleOrchestrator создаёт “склеенный” оркестратор на dummy-подсистемах и in-memory TransactionStore.
-func NewSimpleOrchestrator() *SimpleOrchestrator {
-	// Containers
-	sm := newInMemoryStateManager()
-	rt := newSimplePaymentRouter()
-	wf := newSimpleWorkflowEngine()
-	retry := newSimpleRetryHandler()
-	cb := newSimpleCallbackHandler()
+// NewSimpleOrchestrator создаёт оркестратор платежей.
+// Если TransactionStore не передан, используется in-memory хранилище.
+func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestrator {
+	store := storage.NewInMemoryTransactionStore()
+	if len(stores) > 0 && stores[0] != nil {
+		store = stores[0]
+	}
 
-	// Subsystems (dummy)
 	return &SimpleOrchestrator{
 		validator:     validator.NewDummyValidator(),
 		antiFraud:     antifraud.NewDummyAntiFraud(),
 		tokenizer:     tokenizer.NewDummyTokenizer(),
-		adapter:       adapter.NewDummyAdapter("DUMMY"),
 		notifications: notifications.NewDummyNotifications(),
 
-		store:  storage.NewInMemoryTransactionStore(),
+		store:  store,
 		logger: noOpLogger{},
 
-		stateManager: sm,
-		router:       rt,
-		workflow:     wf,
-		retry:        retry,
-		callback:     cb,
+		stateManager: newInMemoryStateManager(),
+		router:       newSimplePaymentRouter(),
+		workflow:     newSimpleWorkflowEngine(),
+		retry:        newSimpleRetryHandler(),
+		callback:     newSimpleCallbackHandler(),
 	}
 }
 
@@ -82,12 +64,11 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		return dto.PaymentResponse{}, errors.New("merchant_id, idempotency_key и payment_id обязательны")
 	}
 
-	// 1) Idempotency: если этот idempotency_key уже был обработан — отдаем сохранённый response.
+	// 1) Idempotency: если этот idempotency_key уже был обработан — отдаём сохранённый response.
 	if status, payloadJSON, found, err := o.store.GetByIdempotencyKey(ctx, req.MerchantID, req.IdempotencyKey); err != nil {
 		return dto.PaymentResponse{}, err
 	} else if found {
 		if payloadJSON == "" {
-			// на случай “поломанных” записей
 			return dto.PaymentResponse{
 				ID:             req.PaymentID,
 				MerchantID:     req.MerchantID,
@@ -99,12 +80,10 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 					CustomerData:      req.PaymentInfo.CustomerData,
 					Description:       req.PaymentInfo.Description,
 					CreatedAt:         req.PaymentInfo.CreatedAt,
-					UpdatedAt:        time.Now().UTC(),
+					UpdatedAt:         nowUTC(),
 				},
-				TransactionDetails: dto.TransactionDetails{
-					RetryCount: 0,
-				},
-				Error: nil,
+				TransactionDetails: dto.TransactionDetails{RetryCount: 0},
+				Error:              nil,
 			}, nil
 		}
 
@@ -115,107 +94,90 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		return cached, nil
 	}
 
-	// 2) Workflow containers: start session / set status
+	// 2) Workflow containers: start session / set status.
 	sessionID, err := o.workflow.StartSession(ctx, req)
 	if err != nil {
 		return dto.PaymentResponse{}, err
 	}
-	_ = sessionID
 
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusPending)
-
 	_ = o.logger.Log(ctx, contracts.PaymentEvent{
 		Type:       contracts.EventPaymentReceived,
 		MerchantID: req.MerchantID,
 		PaymentID:  req.PaymentID,
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  nowUTC(),
 		Details:    "received",
 	})
 
-	// 3) Validator
+	// 3) Validator.
 	validatedReq, err := o.validator.Validate(ctx, req)
 	if err != nil {
-		_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusFailed)
-		return buildErrorResponse(req, statusFailed, "VALIDATION_ERROR", err.Error()), o.store.Save(
-			ctx,
-			req.MerchantID,
-			req.PaymentID,
-			req.IdempotencyKey,
-			statusFailed,
-			mustMarshalPaymentResponse(buildErrorResponse(req, statusFailed, "VALIDATION_ERROR", err.Error())),
-			time.Now().UTC(),
-		)
+		return o.failAndSave(ctx, req, statusFailed, "VALIDATION_ERROR", err.Error())
 	}
 	_ = o.logger.Log(ctx, contracts.PaymentEvent{
 		Type:       contracts.EventPaymentValidated,
 		MerchantID: validatedReq.MerchantID,
 		PaymentID:  validatedReq.PaymentID,
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  nowUTC(),
 		Details:    "validated",
 	})
 
-	// 4) AntiFraud
+	// 4) AntiFraud.
 	fraudResult, err := o.antiFraud.Check(ctx, validatedReq)
 	if err != nil {
-		_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusFailed)
-		resp := buildErrorResponse(req, statusFailed, "ANTIFRAUD_ERROR", err.Error())
-		_ = o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, statusFailed, mustMarshalPaymentResponse(resp), time.Now().UTC())
-		return resp, nil
+		return o.failAndSave(ctx, req, statusFailed, "ANTIFRAUD_ERROR", err.Error())
+	}
+	if fraudResult.Result == "BLOCKED" {
+		msg := fraudResult.Reason
+		if msg == "" {
+			msg = "payment blocked by antifraud"
+		}
+		return o.failAndSave(ctx, req, statusDeclined, "ANTIFRAUD_DECLINED", msg)
 	}
 	_ = o.logger.Log(ctx, contracts.PaymentEvent{
 		Type:       contracts.EventFraudChecked,
 		MerchantID: validatedReq.MerchantID,
 		PaymentID:  validatedReq.PaymentID,
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  nowUTC(),
 		Details:    "antifraud=" + fraudResult.Result,
 	})
 
-	// 5) Router (choose paymentSystem + adapterKey)
+	// 5) Router.
 	paymentSystem, adapterKey, err := o.router.Route(ctx, validatedReq, fraudResult)
 	if err != nil {
-		_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusFailed)
-		resp := buildErrorResponse(req, statusFailed, "ROUTING_ERROR", err.Error())
-		_ = o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, statusFailed, mustMarshalPaymentResponse(resp), time.Now().UTC())
-		return resp, nil
+		return o.failAndSave(ctx, req, statusFailed, "ROUTING_ERROR", err.Error())
 	}
-	_ = paymentSystem
 	_ = adapterKey
 
-	// Для каркаса: если router поменял paymentSystem — обновим адаптер “на лету”.
-	// В реальном проекте это делается через фабрику адаптеров по adapterKey/paymentSystem.
-	o.adapter = adapter.NewDummyAdapter(paymentSystem)
-
-	// 6) Tokenization
+	// 6) Tokenization.
 	tok, err := o.tokenizer.Tokenize(ctx, validatedReq)
 	if err != nil {
-		_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusFailed)
-		resp := buildErrorResponse(req, statusFailed, "TOKENIZATION_ERROR", err.Error())
-		_ = o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, statusFailed, mustMarshalPaymentResponse(resp), time.Now().UTC())
-		return resp, nil
+		return o.failAndSave(ctx, req, statusFailed, "TOKENIZATION_ERROR", err.Error())
 	}
 	_ = o.logger.Log(ctx, contracts.PaymentEvent{
 		Type:       contracts.EventTokenized,
 		MerchantID: validatedReq.MerchantID,
 		PaymentID:  validatedReq.PaymentID,
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  nowUTC(),
 		Details:    "tokenized",
 	})
 
-	// 7) Adapter + retry
+	// 7) Adapter + retry.
+	paymentAdapter := adapter.NewDummyAdapter(paymentSystem)
 	var lastAdapterResult contracts.AdapterResult
 	retryCount := 0
+
 	for {
 		_ = o.logger.Log(ctx, contracts.PaymentEvent{
 			Type:       contracts.EventAdapterCalled,
 			MerchantID: validatedReq.MerchantID,
 			PaymentID:  validatedReq.PaymentID,
-			Timestamp:  time.Now().UTC(),
-			Details:    fmt.Sprintf("attempt=%d", retryCount),
+			Timestamp:  nowUTC(),
+			Details:    fmt.Sprintf("adapter=%s attempt=%d", paymentSystem, retryCount),
 		})
 
-		lastAdapterResult, err = o.adapter.Send(ctx, tok, validatedReq)
+		lastAdapterResult, err = paymentAdapter.Send(ctx, tok, validatedReq)
 		if err != nil {
-			// treat transport error as FAILED adapter result
 			lastAdapterResult = contracts.AdapterResult{
 				ExternalTransactionID: "",
 				PaymentSystem:         paymentSystem,
@@ -223,13 +185,13 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 				ErrorMessage:          err.Error(),
 			}
 		}
-
 		lastAdapterResult.PaymentSystem = paymentSystem
+
 		_ = o.logger.Log(ctx, contracts.PaymentEvent{
 			Type:       contracts.EventAdapterResultReceived,
 			MerchantID: validatedReq.MerchantID,
 			PaymentID:  validatedReq.PaymentID,
-			Timestamp:  time.Now().UTC(),
+			Timestamp:  nowUTC(),
 			Details:    "status=" + lastAdapterResult.Status,
 		})
 
@@ -241,50 +203,58 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		time.Sleep(o.retry.RetryAfter(retryCount))
 	}
 
-	// 8) Callback handler: build gateway response
+	// 8) Callback handler: build gateway response.
 	resp, err := o.callback.HandleCallback(ctx, lastAdapterResult, validatedReq, tok)
 	if err != nil {
-		_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusFailed)
 		resp = buildErrorResponse(req, statusFailed, "CALLBACK_ERROR", err.Error())
 	}
+	resp.TransactionDetails.RetryCount = retryCount
 
 	finalStatus := resp.CurrentStatus
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, finalStatus)
 	_ = o.workflow.CompleteSession(ctx, sessionID, finalStatus)
 
-	// 9) Notifications (for каркаса — no-op)
+	// 9) Notifications.
 	_ = o.notifications.Notify(ctx, resp)
+	_ = o.logger.Log(ctx, contracts.PaymentEvent{
+		Type:       contracts.EventPaymentResponseSent,
+		MerchantID: validatedReq.MerchantID,
+		PaymentID:  validatedReq.PaymentID,
+		Timestamp:  nowUTC(),
+		Details:    "status=" + resp.CurrentStatus,
+	})
 
-	// 10) Save for idempotency
-	_ = o.store.Save(
-		ctx,
-		req.MerchantID,
-		req.PaymentID,
-		req.IdempotencyKey,
-		resp.CurrentStatus,
-		mustMarshalPaymentResponse(resp),
-		time.Now().UTC(),
-	)
+	// 10) Save for idempotency.
+	_ = o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, resp.CurrentStatus, mustMarshalPaymentResponse(resp), nowUTC())
 
 	return resp, nil
 }
 
-// ---- helpers ----
+func (o *SimpleOrchestrator) failAndSave(ctx context.Context, req dto.CreatePaymentRequest, status string, code string, msg string) (dto.PaymentResponse, error) {
+	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, status)
+	resp := buildErrorResponse(req, status, code, msg)
+	_ = o.logger.Log(ctx, contracts.PaymentEvent{
+		Type:       contracts.EventPaymentFailed,
+		MerchantID: req.MerchantID,
+		PaymentID:  req.PaymentID,
+		Timestamp:  nowUTC(),
+		Details:    code + ": " + msg,
+	})
+	return resp, o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, status, mustMarshalPaymentResponse(resp), nowUTC())
+}
 
 func mustMarshalPaymentResponse(resp dto.PaymentResponse) string {
 	b, err := json.Marshal(resp)
 	if err != nil {
-		// для каркаса не падать из-за marshal
 		return ""
 	}
 	return string(b)
 }
 
 func buildErrorResponse(req dto.CreatePaymentRequest, status string, code string, msg string) dto.PaymentResponse {
-	now := time.Now().UTC()
 	return dto.PaymentResponse{
-		ID:              req.PaymentID,
-		MerchantID:      req.MerchantID,
+		ID:             req.PaymentID,
+		MerchantID:     req.MerchantID,
 		IdempotencyKey: req.IdempotencyKey,
 		CurrentStatus:  status,
 		PaymentInfo: dto.PaymentInfoResponse{
@@ -293,158 +263,12 @@ func buildErrorResponse(req dto.CreatePaymentRequest, status string, code string
 			CustomerData:      req.PaymentInfo.CustomerData,
 			Description:       req.PaymentInfo.Description,
 			CreatedAt:         req.PaymentInfo.CreatedAt,
-			UpdatedAt:        now,
+			UpdatedAt:         nowUTC(),
 		},
-		TransactionDetails: dto.TransactionDetails{
-			RetryCount: 0,
-		},
+		TransactionDetails: dto.TransactionDetails{RetryCount: 0},
 		Error: &dto.GatewayError{
 			Code:    code,
 			Message: msg,
 		},
 	}
-}
-
-// ---- Containers implementations (simple, in-memory) ----
-
-type inMemoryStateManager struct {
-	byPayment map[string]string // merchant:paymentID -> status
-}
-
-func newInMemoryStateManager() contracts.TransactionStateManager {
-	return &inMemoryStateManager{byPayment: make(map[string]string)}
-}
-
-func (s *inMemoryStateManager) GetStatus(ctx context.Context, merchantID, paymentID string) (string, error) {
-	_ = ctx
-	return s.byPayment[merchantID+":"+paymentID], nil
-}
-func (s *inMemoryStateManager) SetStatus(ctx context.Context, merchantID, paymentID, status string) error {
-	_ = ctx
-	s.byPayment[merchantID+":"+paymentID] = status
-	return nil
-}
-
-type simplePaymentRouter struct{}
-
-func newSimplePaymentRouter() contracts.PaymentRouter {
-	return &simplePaymentRouter{}
-}
-
-func (r *simplePaymentRouter) Route(ctx context.Context, req dto.CreatePaymentRequest, fraud contracts.AntiFraudResult) (paymentSystem string, adapterKey string, err error) {
-	_ = ctx
-
-	// Простейшее правило: на основе типа метода.
-	switch req.PaymentInfo.PaymentMethodData.Type {
-	case dto.PaymentMethodSBP:
-		return "SBP", "sbp_adapter", nil
-	case dto.PaymentMethodCard:
-		_ = fraud
-		return "CARD", "card_adapter", nil
-	case dto.PaymentMethodDigitalWallet:
-		_ = fraud
-		return "DIGITAL_WALLET", "wallet_adapter", nil
-	default:
-		return "UNKNOWN", "unknown_adapter", nil
-	}
-}
-
-type simpleWorkflowEngine struct{}
-
-func newSimpleWorkflowEngine() contracts.WorkflowEngine {
-	return &simpleWorkflowEngine{}
-}
-
-func (w *simpleWorkflowEngine) StartSession(ctx context.Context, req dto.CreatePaymentRequest) (string, error) {
-	_ = ctx
-	// В каркасе сессия = paymentID + timestamp.
-	return fmt.Sprintf("sess_%s_%d", req.PaymentID, time.Now().UnixNano()), nil
-}
-func (w *simpleWorkflowEngine) CompleteSession(ctx context.Context, sessionID string, finalStatus string) error {
-	_ = ctx
-	_ = sessionID
-	_ = finalStatus
-	return nil
-}
-
-type simpleRetryHandler struct {
-	maxAttempts int
-}
-
-func newSimpleRetryHandler() contracts.RetryHandler {
-	return &simpleRetryHandler{maxAttempts: 3}
-}
-
-func (h *simpleRetryHandler) ShouldRetry(ctx context.Context, adapterResult contracts.AdapterResult, retryCount int) bool {
-	_ = ctx
-	if retryCount >= h.maxAttempts-1 {
-		return false
-	}
-	return adapterResult.Status != statusCaptured
-}
-
-func (h *simpleRetryHandler) NextRetryCount(current int) int { return current + 1 }
-func (h *simpleRetryHandler) RetryAfter(attempt int) time.Duration {
-	_ = attempt
-	return 50 * time.Millisecond
-}
-
-type simpleCallbackHandler struct{}
-
-func newSimpleCallbackHandler() contracts.CallbackHandler {
-	return &simpleCallbackHandler{}
-}
-
-func (c *simpleCallbackHandler) HandleCallback(
-	ctx context.Context,
-	adapterResult contracts.AdapterResult,
-	req dto.CreatePaymentRequest,
-	token string,
-) (dto.PaymentResponse, error) {
-	_ = ctx
-
-	now := time.Now().UTC()
-	retryCount := 0 // в каркасе можно потом пробросить реальное значение из RetryHandler/цикла
-
-	fraudCheck := adapterResult.Status
-	if adapterResult.Status == statusCaptured {
-		fraudCheck = "PASSED"
-	} else {
-		fraudCheck = "FAILED"
-	}
-
-	status := statusCaptured
-	errObj := (*dto.GatewayError)(nil)
-	if adapterResult.Status != statusCaptured {
-		status = statusFailed
-		errObj = &dto.GatewayError{
-			Code:    "ADAPTER_FAILED",
-			Message: adapterResult.ErrorMessage,
-		}
-	}
-
-	resp := dto.PaymentResponse{
-		ID:              req.PaymentID,
-		MerchantID:      req.MerchantID,
-		IdempotencyKey: req.IdempotencyKey,
-		CurrentStatus:  status,
-		PaymentInfo: dto.PaymentInfoResponse{
-			Amount:            req.PaymentInfo.Amount,
-			PaymentMethodData: req.PaymentInfo.PaymentMethodData,
-			CustomerData:      req.PaymentInfo.CustomerData,
-			Description:       req.PaymentInfo.Description,
-			CreatedAt:         req.PaymentInfo.CreatedAt,
-			UpdatedAt:        now,
-		},
-		TransactionDetails: dto.TransactionDetails{
-			ExternalTransactionID: adapterResult.ExternalTransactionID,
-			PaymentSystem:         adapterResult.PaymentSystem,
-			Token:                 token,
-			FraudCheckResult:     fraudCheck,
-			RetryCount:           retryCount,
-		},
-		Error: errObj,
-	}
-
-	return resp, nil
 }

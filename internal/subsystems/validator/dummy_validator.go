@@ -45,6 +45,7 @@ func NewPaymentDataValidator() contracts.PaymentValidator {
 	_ = v.RegisterValidation("card_exp", validateCardExpiration)
 	_ = v.RegisterValidation("cvv", validateCVV)
 	_ = v.RegisterValidation("wallet_id", validateWalletID)
+	_ = v.RegisterValidation("payment_status", validatePaymentStatus)
 
 	return &PaymentDataValidator{validate: v}
 }
@@ -76,7 +77,7 @@ type createPaymentValidationModel struct {
 	MerchantID     string                     `validate:"required,min=3,max=64"`
 	IdempotencyKey string                     `validate:"required,min=8,max=128"`
 	PaymentID      string                     `validate:"required,min=3,max=64"`
-	CurrentStatus  string                     `validate:"required,oneof=CREATED PENDING SUCCESS FAILED"`
+	CurrentStatus  string                     `validate:"required,payment_status"`
 	PaymentInfo    paymentInfoValidationModel `validate:"required"`
 }
 
@@ -173,6 +174,10 @@ func onlyDigits(value string) string {
 		}
 	}
 	return b.String()
+}
+
+func validatePaymentStatus(fl playground.FieldLevel) bool {
+	return dto.IsValidPaymentStatus(fl.Field().String())
 }
 
 func validatePaymentMethod(fl playground.FieldLevel) bool {
@@ -304,8 +309,10 @@ func validationErrorMessage(err playground.FieldError) string {
 		return field + " должен быть больше 0"
 	case "lte":
 		return fmt.Sprintf("%s не должен превышать %.2f", field, maxAmountValue)
+	case "payment_status":
+		return field + " содержит недопустимый статус платежа"
 	case "oneof":
-		return field + " содержит недопустимый статус"
+		return field + " содержит недопустимое значение"
 	case "email":
 		return field + " должен быть корректным email"
 	case "payment_method":

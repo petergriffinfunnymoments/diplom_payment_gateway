@@ -20,7 +20,7 @@ func (h *simpleRetryHandler) ShouldRetry(ctx context.Context, adapterResult cont
 	if retryCount >= h.maxAttempts-1 {
 		return false
 	}
-	return adapterResult.Status != statusSuccess
+	return adapterResult.Status != statusCaptured
 }
 
 func (h *simpleRetryHandler) NextRetryCount(current int) int {

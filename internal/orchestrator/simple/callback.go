@@ -21,11 +21,11 @@ func (c *simpleCallbackHandler) HandleCallback(
 ) (dto.PaymentResponse, error) {
 	_ = ctx
 
-	status := statusSuccess
+	status := statusCaptured
 	fraudCheck := "PASSED"
 	var errObj *dto.GatewayError
 
-	if adapterResult.Status != statusSuccess {
+	if adapterResult.Status != statusCaptured {
 		status = statusFailed
 		fraudCheck = "FAILED"
 		msg := adapterResult.ErrorMessage
@@ -36,8 +36,8 @@ func (c *simpleCallbackHandler) HandleCallback(
 	}
 
 	return dto.PaymentResponse{
-		ID:              req.PaymentID,
-		MerchantID:      req.MerchantID,
+		ID:             req.PaymentID,
+		MerchantID:     req.MerchantID,
 		IdempotencyKey: req.IdempotencyKey,
 		CurrentStatus:  status,
 		PaymentInfo: dto.PaymentInfoResponse{
@@ -46,14 +46,14 @@ func (c *simpleCallbackHandler) HandleCallback(
 			CustomerData:      req.PaymentInfo.CustomerData,
 			Description:       req.PaymentInfo.Description,
 			CreatedAt:         req.PaymentInfo.CreatedAt,
-			UpdatedAt:        nowUTC(),
+			UpdatedAt:         nowUTC(),
 		},
 		TransactionDetails: dto.TransactionDetails{
 			ExternalTransactionID: adapterResult.ExternalTransactionID,
 			PaymentSystem:         adapterResult.PaymentSystem,
 			Token:                 token,
-			FraudCheckResult:     fraudCheck,
-			RetryCount:           0,
+			FraudCheckResult:      fraudCheck,
+			RetryCount:            0,
 		},
 		Error: errObj,
 	}, nil
