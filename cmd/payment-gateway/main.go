@@ -18,6 +18,7 @@ import (
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
 	paymentlogging "payment-gateway/internal/subsystems/logging"
 	"payment-gateway/internal/subsystems/storage"
+	paymenttokenizer "payment-gateway/internal/subsystems/tokenizer"
 )
 
 type healthResponse struct {
@@ -64,6 +65,7 @@ func main() {
 
 	store := storage.NewInMemoryTransactionStore()
 	var eventLogger contracts.EventLogger = paymentlogging.NewDummyEventLogger(logger)
+	var tokenizerService contracts.Tokenizer = paymenttokenizer.NewDummyTokenizer()
 
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		pgStore, err := storage.NewPostgresTransactionStoreAsContract(context.Background(), dsn)
@@ -86,11 +88,19 @@ func main() {
 		}
 		eventLogger = pgEventLogger
 		logger.Log("level", "info", "msg", "postgres event logger connected")
+
+		pgTokenizer, err := paymenttokenizer.NewPostgresTokenizer(context.Background(), dsn)
+		if err != nil {
+			logger.Log("level", "error", "msg", "failed to connect postgres tokenizer", "err", err.Error())
+			os.Exit(1)
+		}
+		tokenizerService = pgTokenizer
+		logger.Log("level", "info", "msg", "postgres tokenizer connected")
 	} else {
 		logger.Log("level", "warn", "msg", "DATABASE_URL is empty; using in-memory transaction store and console event logger")
 	}
 
-	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithLogger(store, eventLogger)
+	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithDependencies(store, eventLogger, tokenizerService)
 	mux.Handle("/payments", payments.NewCreatePaymentHandler(orchestrator, logger))
 
 	// Статика (web/index.html и web/static/*)

@@ -44,12 +44,22 @@ func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestr
 		store = stores[0]
 	}
 
-	return newSimpleOrchestrator(store, noOpLogger{})
+	return newSimpleOrchestrator(store, noOpLogger{}, nil)
 }
 
 // NewSimpleOrchestratorWithLogger создаёт оркестратор с явной реализацией TransactionStore и EventLogger.
 // Его использует main.go, когда PostgreSQL уже подключён.
 func NewSimpleOrchestratorWithLogger(store contracts.TransactionStore, eventLogger contracts.EventLogger) *SimpleOrchestrator {
+	return NewSimpleOrchestratorWithDependencies(store, eventLogger, nil)
+}
+
+// NewSimpleOrchestratorWithDependencies создаёт оркестратор с явными реализациями зависимостей.
+// Это нужно, чтобы подключать реальные подсистемы: PostgreSQL-хранилище, логирование, токенизацию и т.д.
+func NewSimpleOrchestratorWithDependencies(
+	store contracts.TransactionStore,
+	eventLogger contracts.EventLogger,
+	tokenizerService contracts.Tokenizer,
+) *SimpleOrchestrator {
 	if store == nil {
 		store = storage.NewInMemoryTransactionStore()
 	}
@@ -57,14 +67,22 @@ func NewSimpleOrchestratorWithLogger(store contracts.TransactionStore, eventLogg
 		eventLogger = noOpLogger{}
 	}
 
-	return newSimpleOrchestrator(store, eventLogger)
+	return newSimpleOrchestrator(store, eventLogger, tokenizerService)
 }
 
-func newSimpleOrchestrator(store contracts.TransactionStore, eventLogger contracts.EventLogger) *SimpleOrchestrator {
+func newSimpleOrchestrator(
+	store contracts.TransactionStore,
+	eventLogger contracts.EventLogger,
+	tokenizerService contracts.Tokenizer,
+) *SimpleOrchestrator {
+	if tokenizerService == nil {
+		tokenizerService = tokenizer.NewDummyTokenizer()
+	}
+
 	return &SimpleOrchestrator{
 		validator:     validator.NewDummyValidator(),
 		antiFraud:     antifraud.NewDummyAntiFraud(),
-		tokenizer:     tokenizer.NewDummyTokenizer(),
+		tokenizer:     tokenizerService,
 		notifications: notifications.NewDummyNotifications(),
 
 		store:  store,
@@ -153,7 +171,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		"fraud_result": fraudResult.Result,
 		"fraud_reason": fraudResult.Reason,
 	})
-	if fraudResult.Result == antifraud.ResultBlocked {
+	if fraudResult.Result == "BLOCKED" {
 		msg := fraudResult.Reason
 		if msg == "" {
 			msg = "payment blocked by antifraud"
@@ -221,7 +239,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		resp = buildErrorResponse(req, statusFailed, "CALLBACK_ERROR", err.Error())
 	}
 	resp.TransactionDetails.RetryCount = retryCount
-	resp.TransactionDetails.FraudCheckResult = fraudResult.Result
 
 	finalStatus := resp.CurrentStatus
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, finalStatus)
@@ -242,9 +259,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 func (o *SimpleOrchestrator) failAndSave(ctx context.Context, req dto.CreatePaymentRequest, status string, code string, msg string, service string) (dto.PaymentResponse, error) {
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, status)
 	resp := buildErrorResponse(req, status, code, msg)
-	if code == "ANTIFRAUD_DECLINED" {
-		resp.TransactionDetails.FraudCheckResult = antifraud.ResultBlocked
-	}
 	_ = o.logEvent(ctx, req, contracts.EventPaymentFailed, contracts.LogLevelError, service, status, "Payment processing failed", map[string]string{
 		"error_code":    code,
 		"error_message": msg,

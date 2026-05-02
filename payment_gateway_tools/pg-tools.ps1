@@ -160,3 +160,48 @@ WHERE idempotency_key = '$IdempotencyKey'
 ORDER BY updated_at DESC;
 "
 }
+function pgtokens {
+    param(
+        [int]$Limit = 20
+    )
+
+    & $PSQL $env:PGURL -c "
+SELECT
+    id,
+    merchant_id,
+    payment_id,
+    idempotency_key,
+    token_preview,
+    payment_method,
+    masked_value,
+    expires_at,
+    created_at
+FROM payment_tokens
+ORDER BY id DESC
+LIMIT $Limit;
+"
+}
+
+function pgtokenpay {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$PaymentId
+    )
+
+    & $PSQL $env:PGURL -c "
+SELECT
+    id,
+    merchant_id,
+    payment_id,
+    idempotency_key,
+    token_preview,
+    payment_method,
+    masked_value,
+    expires_at,
+    created_at,
+    revoked_at
+FROM payment_tokens
+WHERE payment_id = '$PaymentId'
+ORDER BY id DESC;
+"
+}
