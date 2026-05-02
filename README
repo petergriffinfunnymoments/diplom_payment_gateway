@@ -1,3 +1,14 @@
-Команды:
-1. Запуск сервера: go run ./cmd/payment-gateway
-2. Запуск SQL команд: . payment_gateway_tools\pg-tools.ps1
+Порядок запуска:
+1. Открой PostgreSQL
+2. Запусти LocalTunnel: lt --port 8080
+3. В кабинете ЮКасса, в разделе HTTP-уведомления укажи URL LocalTunnel и включи события payment.succeeded, payment.canceled и payment.waiting_for_capture
+4. Задай переменные окружения: .\run.ps1 (преждевременно поменяй ссылку LocalTunnel)
+5. В терминале запусти платежный шлюз в корне проекта: go run ./cmd/payment-gateway и перейди по ссылке LocalTunnel
+6. Все логи проверяй через команды:
+    pgtx 10           # последние транзакции
+    pglogs 30         # последние логи
+    pgtokens 20       # последние токены
+    pgerrors 20       # последние ошибки
+    pgstatus          # статистика по статусам
+    pgpay pay_ТВОЙ_ID # история конкретного платежа
+    pgctx pay_ТВОЙ_ID # контекст логов конкретного платежа
