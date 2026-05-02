@@ -78,6 +78,8 @@ type AdapterResult struct {
 	ExternalTransactionID string
 	PaymentSystem         string
 	Status                string // например: CAPTURED / FAILED / PENDING
+	ProviderStatus        string // исходный статус внешней платежной системы
+	PaymentURL            string // ссылка на платежную форму, если провайдер требует подтверждение пользователя
 	ErrorMessage          string
 }
 

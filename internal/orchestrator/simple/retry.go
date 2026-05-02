@@ -20,7 +20,15 @@ func (h *simpleRetryHandler) ShouldRetry(ctx context.Context, adapterResult cont
 	if retryCount >= h.maxAttempts-1 {
 		return false
 	}
-	return adapterResult.Status != statusCaptured
+
+	// PENDING — нормальный статус для провайдеров с платежной формой/redirect.
+	// DECLINED/CANCELLED — бизнес-отказ, его не нужно автоматически повторять.
+	switch adapterResult.Status {
+	case statusCaptured, statusPending, statusAuthorized, statusCaptureRequested, statusDeclined, statusCancelled:
+		return false
+	default:
+		return true
+	}
 }
 
 func (h *simpleRetryHandler) NextRetryCount(current int) int {

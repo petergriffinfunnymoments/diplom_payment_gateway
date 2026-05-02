@@ -21,11 +21,25 @@ func (c *simpleCallbackHandler) HandleCallback(
 ) (dto.PaymentResponse, error) {
 	_ = ctx
 
-	status := statusCaptured
+	status := adapterResult.Status
+	if status == "" {
+		status = statusFailed
+	}
+
 	fraudCheck := "PASSED"
 	var errObj *dto.GatewayError
 
-	if adapterResult.Status != statusCaptured {
+	switch status {
+	case statusCaptured, statusPending, statusAuthorized, statusCaptureRequested:
+		// Не считаем PENDING ошибкой: внешний провайдер может вернуть ссылку на оплату.
+	case statusDeclined, statusCancelled:
+		fraudCheck = "PASSED"
+		msg := adapterResult.ErrorMessage
+		if msg == "" {
+			msg = "payment was declined by external payment provider"
+		}
+		errObj = &dto.GatewayError{Code: "PAYMENT_DECLINED", Message: msg}
+	default:
 		status = statusFailed
 		fraudCheck = "FAILED"
 		msg := adapterResult.ErrorMessage
@@ -51,6 +65,8 @@ func (c *simpleCallbackHandler) HandleCallback(
 		TransactionDetails: dto.TransactionDetails{
 			ExternalTransactionID: adapterResult.ExternalTransactionID,
 			PaymentSystem:         adapterResult.PaymentSystem,
+			ProviderStatus:        adapterResult.ProviderStatus,
+			PaymentURL:            adapterResult.PaymentURL,
 			Token:                 token,
 			FraudCheckResult:      fraudCheck,
 			RetryCount:            0,

@@ -6,7 +6,7 @@ import "time"
 type PaymentMethodType string
 
 const (
-	PaymentMethodSBP            PaymentMethodType = "СБП"
+	PaymentMethodSBP           PaymentMethodType = "СБП"
 	PaymentMethodCard          PaymentMethodType = "Банковская карта"
 	PaymentMethodDigitalWallet PaymentMethodType = "Цифровой кошелек"
 )
@@ -16,7 +16,7 @@ type PaymentCurrency string
 
 // AmountMoney — сумма платежа.
 type AmountMoney struct {
-	Value    float64          `json:"value"`
+	Value    float64         `json:"value"`
 	Currency PaymentCurrency `json:"currency"`
 }
 
@@ -37,16 +37,16 @@ type PaymentMethodData struct {
 
 // CreatePaymentRequest — запрос на создание платежа.
 type CreatePaymentRequest struct {
-	MerchantID      string `json:"merchant_id"`
+	MerchantID     string `json:"merchant_id"`
 	IdempotencyKey string `json:"idempotency_key"`
-	PaymentID       string `json:"payment_id"`
-	CurrentStatus   string `json:"current_status"`
+	PaymentID      string `json:"payment_id"`
+	CurrentStatus  string `json:"current_status"`
 
 	PaymentInfo PaymentInfo `json:"payment_info"`
 }
 
 type PaymentInfo struct {
-	Amount            AmountMoney        `json:"amount"`
+	Amount            AmountMoney       `json:"amount"`
 	PaymentMethodData PaymentMethodData `json:"payment_method_data"`
 	CustomerData      CustomerData      `json:"customer_data"`
 	CreatedAt         time.Time         `json:"created_at"`
@@ -55,8 +55,8 @@ type PaymentInfo struct {
 
 // PaymentResponse — ответ платежного шлюза.
 type PaymentResponse struct {
-	ID              string `json:"id"`
-	MerchantID      string `json:"merchant_id"`
+	ID             string `json:"id"`
+	MerchantID     string `json:"merchant_id"`
 	IdempotencyKey string `json:"idempotency_key"`
 	CurrentStatus  string `json:"current_status"`
 
@@ -67,7 +67,7 @@ type PaymentResponse struct {
 }
 
 type PaymentInfoResponse struct {
-	Amount            AmountMoney        `json:"amount"`
+	Amount            AmountMoney       `json:"amount"`
 	PaymentMethodData PaymentMethodData `json:"payment_method_data"`
 	CustomerData      CustomerData      `json:"customer_data"`
 	Description       string            `json:"description"`
@@ -77,10 +77,12 @@ type PaymentInfoResponse struct {
 
 type TransactionDetails struct {
 	ExternalTransactionID string `json:"external_transaction_id"`
-	PaymentSystem        string `json:"payment_system"`
-	Token                string `json:"token"`
-	FraudCheckResult     string `json:"fraud_check_result"`
-	RetryCount           int    `json:"retry_count"`
+	PaymentSystem         string `json:"payment_system"`
+	ProviderStatus        string `json:"provider_status,omitempty"`
+	PaymentURL            string `json:"payment_url,omitempty"`
+	Token                 string `json:"token"`
+	FraudCheckResult      string `json:"fraud_check_result"`
+	RetryCount            int    `json:"retry_count"`
 }
 
 type GatewayError struct {

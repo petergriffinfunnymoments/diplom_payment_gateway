@@ -20,10 +20,11 @@ import (
 )
 
 type SimpleOrchestrator struct {
-	validator     contracts.PaymentValidator
-	antiFraud     contracts.AntiFraud
-	tokenizer     contracts.Tokenizer
-	notifications contracts.Notifications
+	validator      contracts.PaymentValidator
+	antiFraud      contracts.AntiFraud
+	tokenizer      contracts.Tokenizer
+	adapterFactory *adapter.Factory
+	notifications  contracts.Notifications
 
 	store  contracts.TransactionStore
 	logger contracts.EventLogger
@@ -59,6 +60,7 @@ func NewSimpleOrchestratorWithDependencies(
 	store contracts.TransactionStore,
 	eventLogger contracts.EventLogger,
 	tokenizerService contracts.Tokenizer,
+	adapterFactories ...*adapter.Factory,
 ) *SimpleOrchestrator {
 	if store == nil {
 		store = storage.NewInMemoryTransactionStore()
@@ -67,23 +69,29 @@ func NewSimpleOrchestratorWithDependencies(
 		eventLogger = noOpLogger{}
 	}
 
-	return newSimpleOrchestrator(store, eventLogger, tokenizerService)
+	return newSimpleOrchestrator(store, eventLogger, tokenizerService, adapterFactories...)
 }
 
 func newSimpleOrchestrator(
 	store contracts.TransactionStore,
 	eventLogger contracts.EventLogger,
 	tokenizerService contracts.Tokenizer,
+	adapterFactories ...*adapter.Factory,
 ) *SimpleOrchestrator {
 	if tokenizerService == nil {
 		tokenizerService = tokenizer.NewDummyTokenizer()
 	}
+	adapterFactory := adapter.NewFactoryFromEnv()
+	if len(adapterFactories) > 0 && adapterFactories[0] != nil {
+		adapterFactory = adapterFactories[0]
+	}
 
 	return &SimpleOrchestrator{
-		validator:     validator.NewDummyValidator(),
-		antiFraud:     antifraud.NewDummyAntiFraud(),
-		tokenizer:     tokenizerService,
-		notifications: notifications.NewDummyNotifications(),
+		validator:      validator.NewDummyValidator(),
+		antiFraud:      antifraud.NewDummyAntiFraud(),
+		tokenizer:      tokenizerService,
+		adapterFactory: adapterFactory,
+		notifications:  notifications.NewDummyNotifications(),
 
 		store:  store,
 		logger: eventLogger,
@@ -195,7 +203,10 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	})
 
 	// 7) Adapter + retry.
-	paymentAdapter := adapter.NewDummyAdapter(paymentSystem)
+	paymentAdapter, selectedProvider, err := o.adapterFactory.Resolve(adapterKey, paymentSystem)
+	if err != nil {
+		return o.failAndSave(ctx, req, statusFailed, "ADAPTER_FACTORY_ERROR", err.Error(), "adapter")
+	}
 	var lastAdapterResult contracts.AdapterResult
 	retryCount := 0
 
@@ -204,6 +215,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		_ = o.logEvent(ctx, validatedReq, contracts.EventAdapterCalled, contracts.LogLevelInfo, "adapter", statusCaptureRequested, "Payment adapter call started", map[string]string{
 			"payment_system": paymentSystem,
 			"adapter_key":    adapterKey,
+			"provider":       selectedProvider,
 			"attempt":        strconv.Itoa(retryCount),
 		})
 
@@ -222,6 +234,8 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 			"payment_system":          paymentSystem,
 			"external_transaction_id": lastAdapterResult.ExternalTransactionID,
 			"adapter_status":          lastAdapterResult.Status,
+			"provider_status":         lastAdapterResult.ProviderStatus,
+			"payment_url":             lastAdapterResult.PaymentURL,
 			"error_message":           lastAdapterResult.ErrorMessage,
 		})
 
