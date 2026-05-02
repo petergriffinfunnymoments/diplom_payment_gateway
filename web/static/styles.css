@@ -171,3 +171,18 @@ input:focus,
 select:focus {
   border-color: rgba(79,140,255,.85);
 }
+
+
+.provider-payment-link {
+  margin-top: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(39, 174, 96, 0.08);
+  border: 1px solid rgba(39, 174, 96, 0.35);
+  font-size: 14px;
+}
+
+.provider-payment-link a {
+  font-weight: 700;
+}

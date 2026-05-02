@@ -55,6 +55,32 @@ function hideStatus() {
 function showResponse(obj) {
   els.responseBox.classList.remove('hidden');
   els.responseBox.textContent = JSON.stringify(obj, null, 2);
+  showProviderPaymentLink(obj);
+}
+
+function showProviderPaymentLink(obj) {
+  const old = document.getElementById('providerPaymentLinkBox');
+  if (old) old.remove();
+
+  const paymentUrl = obj?.transaction_details?.payment_url;
+  if (!paymentUrl) return;
+
+  const box = document.createElement('div');
+  box.id = 'providerPaymentLinkBox';
+  box.className = 'provider-payment-link';
+
+  const text = document.createElement('span');
+  text.textContent = 'Платёж создан во внешней платёжной системе. ';
+
+  const link = document.createElement('a');
+  link.href = paymentUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = 'Перейти к оплате в ЮKassa';
+
+  box.appendChild(text);
+  box.appendChild(link);
+  els.responseBox.insertAdjacentElement('beforebegin', box);
 }
 
 function getSelectedPaymentMethod() {
@@ -339,6 +365,8 @@ function buildRequestPayload() {
 async function submitPayment() {
   hideStatus();
   els.responseBox.classList.add('hidden');
+  const oldPaymentLink = document.getElementById('providerPaymentLinkBox');
+  if (oldPaymentLink) oldPaymentLink.remove();
 
   if (!validateForm()) return;
 

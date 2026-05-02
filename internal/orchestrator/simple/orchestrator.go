@@ -228,7 +228,9 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 				ErrorMessage:          err.Error(),
 			}
 		}
-		lastAdapterResult.PaymentSystem = paymentSystem
+		if lastAdapterResult.PaymentSystem == "" {
+			lastAdapterResult.PaymentSystem = paymentSystem
+		}
 
 		_ = o.logEvent(ctx, validatedReq, contracts.EventAdapterResultReceived, contracts.LogLevelInfo, "adapter", lastAdapterResult.Status, "Payment adapter returned result", map[string]string{
 			"payment_system":          paymentSystem,

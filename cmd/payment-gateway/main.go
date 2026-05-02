@@ -15,6 +15,7 @@ import (
 
 	"payment-gateway/internal/contracts"
 	payments "payment-gateway/internal/httpapi/payments"
+	webhooks "payment-gateway/internal/httpapi/webhooks"
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
 	paymentlogging "payment-gateway/internal/subsystems/logging"
 	"payment-gateway/internal/subsystems/storage"
@@ -102,6 +103,7 @@ func main() {
 
 	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithDependencies(store, eventLogger, tokenizerService)
 	mux.Handle("/payments", payments.NewCreatePaymentHandler(orchestrator, logger))
+	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandler(store, eventLogger))
 
 	// Статика (web/index.html и web/static/*)
 	mux.Handle("/", http.FileServer(http.Dir("web")))
