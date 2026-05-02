@@ -4,6 +4,7 @@
 # ==============================
 
 # Укажи свою строку подключения
+$PSQL = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
 $env:PGURL = "postgres://postgres:886540@localhost:5432/payment_gateway?sslmode=disable"
 
 function pgtables {
