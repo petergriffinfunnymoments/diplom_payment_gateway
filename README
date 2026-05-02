@@ -1,8 +1,8 @@
 Порядок запуска:
 1. Открой PostgreSQL
-2. Запусти LocalTunnel: lt --port 8080
-3. В кабинете ЮКасса, в разделе HTTP-уведомления укажи URL LocalTunnel и включи события payment.succeeded, payment.canceled и payment.waiting_for_capture
-4. Задай переменные окружения: .\run.ps1 (преждевременно поменяй ссылку LocalTunnel)
+2. Запусти LocalTunnel: lt --port 8080 и вставь ссылку в run.ps1
+3. В кабинете ЮКасса, в разделе HTTP-уведомления укажи URL LocalTunnel + /webhooks/yookassa и включи события payment.succeeded, payment.canceled и payment.waiting_for_capture
+4. Задай переменные окружения и команды: . .\payment_gateway_tools\run.ps1 (преждевременно поменяй ссылку LocalTunnel) и . .\payment_gateway_tools\pg-tools.ps1
 5. В терминале запусти платежный шлюз в корне проекта: go run ./cmd/payment-gateway и перейди по ссылке LocalTunnel
 6. Все логи проверяй через команды:
     pgtx 10           # последние транзакции
