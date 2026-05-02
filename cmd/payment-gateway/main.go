@@ -13,8 +13,10 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	kitlog "github.com/go-kit/kit/log"
 
+	"payment-gateway/internal/contracts"
 	payments "payment-gateway/internal/httpapi/payments"
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
+	paymentlogging "payment-gateway/internal/subsystems/logging"
 	"payment-gateway/internal/subsystems/storage"
 )
 
@@ -61,6 +63,7 @@ func main() {
 	mux.Handle("/health", healthHandler)
 
 	store := storage.NewInMemoryTransactionStore()
+	var eventLogger contracts.EventLogger = paymentlogging.NewDummyEventLogger(logger)
 
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		pgStore, err := storage.NewPostgresTransactionStoreAsContract(context.Background(), dsn)
@@ -68,14 +71,26 @@ func main() {
 			logger.Log("level", "error", "msg", "failed to connect postgres", "err", err.Error())
 			os.Exit(1)
 		}
-
 		store = pgStore
 		logger.Log("level", "info", "msg", "postgres transaction store connected")
+
+		env := os.Getenv("APP_ENV")
+		if env == "" {
+			env = "dev"
+		}
+
+		pgEventLogger, err := paymentlogging.NewPostgresEventLogger(context.Background(), dsn, env)
+		if err != nil {
+			logger.Log("level", "error", "msg", "failed to connect postgres event logger", "err", err.Error())
+			os.Exit(1)
+		}
+		eventLogger = pgEventLogger
+		logger.Log("level", "info", "msg", "postgres event logger connected")
 	} else {
-		logger.Log("level", "warn", "msg", "DATABASE_URL is empty; using in-memory transaction store")
+		logger.Log("level", "warn", "msg", "DATABASE_URL is empty; using in-memory transaction store and console event logger")
 	}
 
-	orchestrator := orchestratorSimple.NewSimpleOrchestrator(store)
+	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithLogger(store, eventLogger)
 	mux.Handle("/payments", payments.NewCreatePaymentHandler(orchestrator, logger))
 
 	// Статика (web/index.html и web/static/*)

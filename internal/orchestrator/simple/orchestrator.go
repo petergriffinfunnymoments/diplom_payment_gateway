@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"payment-gateway/internal/contracts"
 	"payment-gateway/internal/dto"
 	"payment-gateway/internal/subsystems/adapter"
 	"payment-gateway/internal/subsystems/antifraud"
+	paymentlogging "payment-gateway/internal/subsystems/logging"
 	"payment-gateway/internal/subsystems/notifications"
 	"payment-gateway/internal/subsystems/storage"
 	"payment-gateway/internal/subsystems/tokenizer"
@@ -42,6 +44,23 @@ func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestr
 		store = stores[0]
 	}
 
+	return newSimpleOrchestrator(store, noOpLogger{})
+}
+
+// NewSimpleOrchestratorWithLogger создаёт оркестратор с явной реализацией TransactionStore и EventLogger.
+// Его использует main.go, когда PostgreSQL уже подключён.
+func NewSimpleOrchestratorWithLogger(store contracts.TransactionStore, eventLogger contracts.EventLogger) *SimpleOrchestrator {
+	if store == nil {
+		store = storage.NewInMemoryTransactionStore()
+	}
+	if eventLogger == nil {
+		eventLogger = noOpLogger{}
+	}
+
+	return newSimpleOrchestrator(store, eventLogger)
+}
+
+func newSimpleOrchestrator(store contracts.TransactionStore, eventLogger contracts.EventLogger) *SimpleOrchestrator {
 	return &SimpleOrchestrator{
 		validator:     validator.NewDummyValidator(),
 		antiFraud:     antifraud.NewDummyAntiFraud(),
@@ -49,7 +68,7 @@ func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestr
 		notifications: notifications.NewDummyNotifications(),
 
 		store:  store,
-		logger: noOpLogger{},
+		logger: eventLogger,
 
 		stateManager: newInMemoryStateManager(),
 		router:       newSimplePaymentRouter(),
@@ -68,6 +87,10 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	if status, payloadJSON, found, err := o.store.GetByIdempotencyKey(ctx, req.MerchantID, req.IdempotencyKey); err != nil {
 		return dto.PaymentResponse{}, err
 	} else if found {
+		_ = o.logEvent(ctx, req, contracts.EventPaymentResponseSent, contracts.LogLevelInfo, "orchestrator", status, "Cached payment response returned by idempotency key", map[string]string{
+			"idempotency_hit": "true",
+		})
+
 		if payloadJSON == "" {
 			return dto.PaymentResponse{
 				ID:             req.PaymentID,
@@ -100,66 +123,57 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		return dto.PaymentResponse{}, err
 	}
 
-	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusPending)
-	_ = o.logger.Log(ctx, contracts.PaymentEvent{
-		Type:       contracts.EventPaymentReceived,
-		MerchantID: req.MerchantID,
-		PaymentID:  req.PaymentID,
-		Timestamp:  nowUTC(),
-		Details:    "received",
+	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusCreated)
+	_ = o.logEvent(ctx, req, contracts.EventPaymentReceived, contracts.LogLevelInfo, "orchestrator", statusCreated, "Payment request received by orchestrator", map[string]string{
+		"session_id":      sessionID,
+		"amount":          strconv.FormatFloat(req.PaymentInfo.Amount.Value, 'f', 2, 64),
+		"currency":        string(req.PaymentInfo.Amount.Currency),
+		"payment_method":  string(req.PaymentInfo.PaymentMethodData.Type),
+		"phone_mask":      paymentlogging.MaskPhone(req.PaymentInfo.CustomerData.Phone),
+		"email_mask":      paymentlogging.MaskEmail(req.PaymentInfo.CustomerData.Email),
+		"card_mask":       paymentlogging.MaskCardNumber(req.PaymentInfo.CustomerData.CardNumber),
+		"has_wallet_id":   strconv.FormatBool(req.PaymentInfo.CustomerData.DigitalWalletID != ""),
+		"description_len": strconv.Itoa(len(req.PaymentInfo.Description)),
 	})
 
 	// 3) Validator.
 	validatedReq, err := o.validator.Validate(ctx, req)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "VALIDATION_ERROR", err.Error())
+		return o.failAndSave(ctx, req, statusFailed, "VALIDATION_ERROR", err.Error(), "validator")
 	}
-	_ = o.logger.Log(ctx, contracts.PaymentEvent{
-		Type:       contracts.EventPaymentValidated,
-		MerchantID: validatedReq.MerchantID,
-		PaymentID:  validatedReq.PaymentID,
-		Timestamp:  nowUTC(),
-		Details:    "validated",
-	})
+	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusPending)
+	_ = o.logEvent(ctx, validatedReq, contracts.EventPaymentValidated, contracts.LogLevelInfo, "validator", statusPending, "Payment request validated", nil)
 
 	// 4) AntiFraud.
 	fraudResult, err := o.antiFraud.Check(ctx, validatedReq)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "ANTIFRAUD_ERROR", err.Error())
+		return o.failAndSave(ctx, req, statusFailed, "ANTIFRAUD_ERROR", err.Error(), "antifraud")
 	}
+	_ = o.logEvent(ctx, validatedReq, contracts.EventFraudChecked, contracts.LogLevelInfo, "antifraud", statusPending, "Antifraud check completed", map[string]string{
+		"fraud_result": fraudResult.Result,
+		"fraud_reason": fraudResult.Reason,
+	})
 	if fraudResult.Result == "BLOCKED" {
 		msg := fraudResult.Reason
 		if msg == "" {
 			msg = "payment blocked by antifraud"
 		}
-		return o.failAndSave(ctx, req, statusDeclined, "ANTIFRAUD_DECLINED", msg)
+		return o.failAndSave(ctx, req, statusDeclined, "ANTIFRAUD_DECLINED", msg, "antifraud")
 	}
-	_ = o.logger.Log(ctx, contracts.PaymentEvent{
-		Type:       contracts.EventFraudChecked,
-		MerchantID: validatedReq.MerchantID,
-		PaymentID:  validatedReq.PaymentID,
-		Timestamp:  nowUTC(),
-		Details:    "antifraud=" + fraudResult.Result,
-	})
 
 	// 5) Router.
 	paymentSystem, adapterKey, err := o.router.Route(ctx, validatedReq, fraudResult)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "ROUTING_ERROR", err.Error())
+		return o.failAndSave(ctx, req, statusFailed, "ROUTING_ERROR", err.Error(), "orchestrator")
 	}
-	_ = adapterKey
 
 	// 6) Tokenization.
 	tok, err := o.tokenizer.Tokenize(ctx, validatedReq)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "TOKENIZATION_ERROR", err.Error())
+		return o.failAndSave(ctx, req, statusFailed, "TOKENIZATION_ERROR", err.Error(), "tokenizer")
 	}
-	_ = o.logger.Log(ctx, contracts.PaymentEvent{
-		Type:       contracts.EventTokenized,
-		MerchantID: validatedReq.MerchantID,
-		PaymentID:  validatedReq.PaymentID,
-		Timestamp:  nowUTC(),
-		Details:    "tokenized",
+	_ = o.logEvent(ctx, validatedReq, contracts.EventTokenized, contracts.LogLevelInfo, "tokenizer", statusPending, "Payment data tokenized", map[string]string{
+		"token_preview": paymentlogging.TokenPreview(tok),
 	})
 
 	// 7) Adapter + retry.
@@ -168,12 +182,11 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	retryCount := 0
 
 	for {
-		_ = o.logger.Log(ctx, contracts.PaymentEvent{
-			Type:       contracts.EventAdapterCalled,
-			MerchantID: validatedReq.MerchantID,
-			PaymentID:  validatedReq.PaymentID,
-			Timestamp:  nowUTC(),
-			Details:    fmt.Sprintf("adapter=%s attempt=%d", paymentSystem, retryCount),
+		_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusCaptureRequested)
+		_ = o.logEvent(ctx, validatedReq, contracts.EventAdapterCalled, contracts.LogLevelInfo, "adapter", statusCaptureRequested, "Payment adapter call started", map[string]string{
+			"payment_system": paymentSystem,
+			"adapter_key":    adapterKey,
+			"attempt":        strconv.Itoa(retryCount),
 		})
 
 		lastAdapterResult, err = paymentAdapter.Send(ctx, tok, validatedReq)
@@ -187,12 +200,11 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		}
 		lastAdapterResult.PaymentSystem = paymentSystem
 
-		_ = o.logger.Log(ctx, contracts.PaymentEvent{
-			Type:       contracts.EventAdapterResultReceived,
-			MerchantID: validatedReq.MerchantID,
-			PaymentID:  validatedReq.PaymentID,
-			Timestamp:  nowUTC(),
-			Details:    "status=" + lastAdapterResult.Status,
+		_ = o.logEvent(ctx, validatedReq, contracts.EventAdapterResultReceived, contracts.LogLevelInfo, "adapter", lastAdapterResult.Status, "Payment adapter returned result", map[string]string{
+			"payment_system":          paymentSystem,
+			"external_transaction_id": lastAdapterResult.ExternalTransactionID,
+			"adapter_status":          lastAdapterResult.Status,
+			"error_message":           lastAdapterResult.ErrorMessage,
 		})
 
 		if lastAdapterResult.Status == statusCaptured || !o.retry.ShouldRetry(ctx, lastAdapterResult, retryCount) {
@@ -216,12 +228,8 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 
 	// 9) Notifications.
 	_ = o.notifications.Notify(ctx, resp)
-	_ = o.logger.Log(ctx, contracts.PaymentEvent{
-		Type:       contracts.EventPaymentResponseSent,
-		MerchantID: validatedReq.MerchantID,
-		PaymentID:  validatedReq.PaymentID,
-		Timestamp:  nowUTC(),
-		Details:    "status=" + resp.CurrentStatus,
+	_ = o.logEvent(ctx, validatedReq, contracts.EventPaymentResponseSent, contracts.LogLevelInfo, "notifications", finalStatus, "Payment response sent to merchant", map[string]string{
+		"retry_count": strconv.Itoa(retryCount),
 	})
 
 	// 10) Save for idempotency.
@@ -230,17 +238,40 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	return resp, nil
 }
 
-func (o *SimpleOrchestrator) failAndSave(ctx context.Context, req dto.CreatePaymentRequest, status string, code string, msg string) (dto.PaymentResponse, error) {
+func (o *SimpleOrchestrator) failAndSave(ctx context.Context, req dto.CreatePaymentRequest, status string, code string, msg string, service string) (dto.PaymentResponse, error) {
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, status)
 	resp := buildErrorResponse(req, status, code, msg)
-	_ = o.logger.Log(ctx, contracts.PaymentEvent{
-		Type:       contracts.EventPaymentFailed,
-		MerchantID: req.MerchantID,
-		PaymentID:  req.PaymentID,
-		Timestamp:  nowUTC(),
-		Details:    code + ": " + msg,
+	_ = o.logEvent(ctx, req, contracts.EventPaymentFailed, contracts.LogLevelError, service, status, "Payment processing failed", map[string]string{
+		"error_code":    code,
+		"error_message": msg,
 	})
 	return resp, o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, status, mustMarshalPaymentResponse(resp), nowUTC())
+}
+
+func (o *SimpleOrchestrator) logEvent(
+	ctx context.Context,
+	req dto.CreatePaymentRequest,
+	eventType contracts.PaymentEventType,
+	level contracts.LogLevel,
+	service string,
+	status string,
+	message string,
+	contextMap map[string]string,
+) error {
+	return o.logger.Log(ctx, contracts.PaymentEvent{
+		Type:           eventType,
+		Level:          level,
+		Service:        service,
+		MerchantID:     req.MerchantID,
+		PaymentID:      req.PaymentID,
+		IdempotencyKey: req.IdempotencyKey,
+		CorrelationID:  req.PaymentID,
+		CurrentStatus:  status,
+		Timestamp:      nowUTC(),
+		Message:        message,
+		Details:        message,
+		Context:        contextMap,
+	})
 }
 
 func mustMarshalPaymentResponse(resp dto.PaymentResponse) string {

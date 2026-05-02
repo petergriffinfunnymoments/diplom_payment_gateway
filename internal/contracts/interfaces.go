@@ -18,17 +18,31 @@ const (
 	EventTokenized             PaymentEventType = "tokenized"
 	EventAdapterCalled         PaymentEventType = "adapter_called"
 	EventAdapterResultReceived PaymentEventType = "adapter_result_received"
-	EventPaymentResponseSent  PaymentEventType = "payment_response_sent"
+	EventPaymentResponseSent   PaymentEventType = "payment_response_sent"
 	EventPaymentFailed         PaymentEventType = "payment_failed"
 )
 
+type LogLevel string
+
+const (
+	LogLevelInfo  LogLevel = "INFO"
+	LogLevelWarn  LogLevel = "WARN"
+	LogLevelError LogLevel = "ERROR"
+)
+
 type PaymentEvent struct {
-	Type       PaymentEventType
-	MerchantID string
-	PaymentID  string
-	// Доп. метаданные (для диплома можно расширить позже)
-	Timestamp time.Time
-	Details   string
+	Type           PaymentEventType
+	Level          LogLevel
+	Service        string
+	MerchantID     string
+	PaymentID      string
+	IdempotencyKey string
+	CorrelationID  string
+	CurrentStatus  string
+	Timestamp      time.Time
+	Message        string
+	Details        string
+	Context        map[string]string
 }
 
 // -------------------- Subsystems (9) --------------------
@@ -46,7 +60,7 @@ type AntiFraud interface {
 
 type AntiFraudResult struct {
 	Result string `json:"result"` // например: PASSED / BLOCKED
-	Reason  string `json:"reason,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type Tokenizer interface {
@@ -63,7 +77,7 @@ type PaymentAdapter interface {
 type AdapterResult struct {
 	ExternalTransactionID string
 	PaymentSystem         string
-	Status                string // например: SUCCESS / FAILED / PENDING
+	Status                string // например: CAPTURED / FAILED / PENDING
 	ErrorMessage          string
 }
 

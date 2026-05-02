@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"payment-gateway/internal/contracts"
@@ -17,12 +18,28 @@ func NewDummyEventLogger(logger log.Logger) contracts.EventLogger {
 
 func (l *DummyEventLogger) Log(ctx context.Context, event contracts.PaymentEvent) error {
 	_ = ctx
-	// Для диплома события можно структурировать, но сейчас достаточно вывести тип и идентификаторы.
+
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
+	}
+	if event.Level == "" {
+		event.Level = contracts.LogLevelInfo
+	}
+	if event.Service == "" {
+		event.Service = "orchestrator"
+	}
+	if event.Message == "" {
+		event.Message = event.Details
+	}
+
 	return l.logger.Log(
-		"type", event.Type,
+		"level", event.Level,
+		"service", event.Service,
+		"event", event.Type,
 		"merchant_id", event.MerchantID,
 		"payment_id", event.PaymentID,
+		"status", event.CurrentStatus,
 		"ts", event.Timestamp.Format("2006-01-02T15:04:05.000Z07:00"),
-		"details", event.Details,
+		"message", event.Message,
 	)
 }

@@ -1,0 +1,3 @@
+Команды:
+1. Запуск сервера: go run ./cmd/payment-gateway
+2. Запуск SQL команд: . payment_gateway_tools\pg-tools.ps1
