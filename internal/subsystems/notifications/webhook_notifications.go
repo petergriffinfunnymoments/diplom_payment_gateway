@@ -30,19 +30,23 @@ type WebhookNotifications struct {
 }
 
 type MerchantNotificationPayload struct {
-	Event          string          `json:"event"`
-	PaymentID      string          `json:"payment_id"`
-	MerchantID     string          `json:"merchant_id"`
-	IdempotencyKey string          `json:"idempotency_key"`
-	Status         string          `json:"status"`
-	Amount         dto.AmountMoney `json:"amount"`
-	PaymentMethod  string          `json:"payment_method"`
-	PaymentSystem  string          `json:"payment_system"`
-	ProviderStatus string          `json:"provider_status,omitempty"`
-	ExternalID     string          `json:"external_transaction_id,omitempty"`
-	ErrorCode      string          `json:"error_code,omitempty"`
-	ErrorMessage   string          `json:"error_message,omitempty"`
-	OccurredAt     time.Time       `json:"occurred_at"`
+	Event                string          `json:"event"`
+	PaymentID            string          `json:"payment_id"`
+	MerchantID           string          `json:"merchant_id"`
+	IdempotencyKey       string          `json:"idempotency_key"`
+	Status               string          `json:"status"`
+	Amount               dto.AmountMoney `json:"amount"`
+	PaymentMethod        string          `json:"payment_method"`
+	PaymentSystem        string          `json:"payment_system"`
+	ProviderStatus       string          `json:"provider_status,omitempty"`
+	ProviderErrorCode    string          `json:"provider_error_code,omitempty"`
+	ProviderErrorMessage string          `json:"provider_error_message,omitempty"`
+	CancellationParty    string          `json:"cancellation_party,omitempty"`
+	CancellationReason   string          `json:"cancellation_reason,omitempty"`
+	ExternalID           string          `json:"external_transaction_id,omitempty"`
+	ErrorCode            string          `json:"error_code,omitempty"`
+	ErrorMessage         string          `json:"error_message,omitempty"`
+	OccurredAt           time.Time       `json:"occurred_at"`
 }
 
 func NewWebhookNotificationsFromEnv(ctx context.Context, dsn string, logger contracts.EventLogger) (contracts.Notifications, error) {
@@ -86,17 +90,21 @@ func (n *WebhookNotifications) Notify(ctx context.Context, resp dto.PaymentRespo
 	}
 
 	payload := MerchantNotificationPayload{
-		Event:          eventName(resp.CurrentStatus),
-		PaymentID:      resp.ID,
-		MerchantID:     resp.MerchantID,
-		IdempotencyKey: resp.IdempotencyKey,
-		Status:         resp.CurrentStatus,
-		Amount:         resp.PaymentInfo.Amount,
-		PaymentMethod:  string(resp.PaymentInfo.PaymentMethodData.Type),
-		PaymentSystem:  resp.TransactionDetails.PaymentSystem,
-		ProviderStatus: resp.TransactionDetails.ProviderStatus,
-		ExternalID:     resp.TransactionDetails.ExternalTransactionID,
-		OccurredAt:     time.Now().UTC(),
+		Event:                eventName(resp.CurrentStatus),
+		PaymentID:            resp.ID,
+		MerchantID:           resp.MerchantID,
+		IdempotencyKey:       resp.IdempotencyKey,
+		Status:               resp.CurrentStatus,
+		Amount:               resp.PaymentInfo.Amount,
+		PaymentMethod:        string(resp.PaymentInfo.PaymentMethodData.Type),
+		PaymentSystem:        resp.TransactionDetails.PaymentSystem,
+		ProviderStatus:       resp.TransactionDetails.ProviderStatus,
+		ProviderErrorCode:    resp.TransactionDetails.ProviderErrorCode,
+		ProviderErrorMessage: resp.TransactionDetails.ProviderErrorMessage,
+		CancellationParty:    resp.TransactionDetails.CancellationParty,
+		CancellationReason:   resp.TransactionDetails.CancellationReason,
+		ExternalID:           resp.TransactionDetails.ExternalTransactionID,
+		OccurredAt:           time.Now().UTC(),
 	}
 	if resp.Error != nil {
 		payload.ErrorCode = resp.Error.Code

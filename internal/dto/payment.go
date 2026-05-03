@@ -79,6 +79,10 @@ type TransactionDetails struct {
 	ExternalTransactionID string `json:"external_transaction_id"`
 	PaymentSystem         string `json:"payment_system"`
 	ProviderStatus        string `json:"provider_status,omitempty"`
+	ProviderErrorCode     string `json:"provider_error_code,omitempty"`
+	ProviderErrorMessage  string `json:"provider_error_message,omitempty"`
+	CancellationParty     string `json:"cancellation_party,omitempty"`
+	CancellationReason    string `json:"cancellation_reason,omitempty"`
 	PaymentURL            string `json:"payment_url,omitempty"`
 	Token                 string `json:"token"`
 	FraudCheckResult      string `json:"fraud_check_result"`

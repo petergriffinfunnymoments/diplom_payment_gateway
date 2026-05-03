@@ -113,13 +113,18 @@ func (a *YooKassaAdapter) Send(ctx context.Context, token string, req dto.Create
 	}
 
 	status := mapYooKassaStatus(yResp.Status)
+	errorMessage := yResp.CancellationDetails.Reason
+	if errorMessage == "" && status == string(dto.StatusDeclined) {
+		errorMessage = "payment was canceled by YooKassa"
+	}
+
 	return contracts.AdapterResult{
 		ExternalTransactionID: yResp.ID,
 		PaymentSystem:         "YOOKASSA",
 		Status:                status,
 		ProviderStatus:        yResp.Status,
 		PaymentURL:            yResp.Confirmation.ConfirmationURL,
-		ErrorMessage:          yResp.CancellationDetails.Reason,
+		ErrorMessage:          errorMessage,
 	}, nil
 }
 

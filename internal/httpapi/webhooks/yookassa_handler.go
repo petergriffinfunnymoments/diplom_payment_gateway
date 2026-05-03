@@ -114,13 +114,24 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	resp.TransactionDetails.PaymentSystem = "YOOKASSA"
 	resp.TransactionDetails.ProviderStatus = providerStatus
 	resp.TransactionDetails.PaymentURL = ""
+	resp.TransactionDetails.CancellationParty = payment.CancellationDetails.Party
+	resp.TransactionDetails.CancellationReason = payment.CancellationDetails.Reason
 
 	if status == string(dto.StatusDeclined) || status == string(dto.StatusFailed) {
-		msg := payment.CancellationDetails.Reason
+		providerReason := strings.TrimSpace(payment.CancellationDetails.Reason)
+		providerParty := strings.TrimSpace(payment.CancellationDetails.Party)
+		msg := providerReason
 		if msg == "" {
 			msg = "payment was canceled by YooKassa"
 		}
-		resp.Error = &dto.GatewayError{Code: "PAYMENT_DECLINED", Message: msg}
+
+		resp.TransactionDetails.ProviderErrorCode = providerReason
+		resp.TransactionDetails.ProviderErrorMessage = msg
+		resp.TransactionDetails.FraudCheckResult = fraudResultFromYooKassaCancellation(providerReason)
+		resp.Error = &dto.GatewayError{
+			Code:    gatewayErrorCodeFromYooKassaCancellation(providerReason),
+			Message: formatYooKassaDeclineMessage(providerParty, providerReason),
+		}
 	} else {
 		resp.Error = nil
 	}
@@ -131,9 +142,18 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	webhookLogType := contracts.EventAdapterResultReceived
+	webhookLogLevel := contracts.LogLevelInfo
+	webhookLogMessage := "YooKassa webhook processed"
+	if status == string(dto.StatusDeclined) || status == string(dto.StatusFailed) {
+		webhookLogType = contracts.EventPaymentFailed
+		webhookLogLevel = contracts.LogLevelWarn
+		webhookLogMessage = "YooKassa webhook processed: payment declined"
+	}
+
 	_ = h.log(r.Context(), contracts.PaymentEvent{
-		Type:           contracts.EventAdapterResultReceived,
-		Level:          contracts.LogLevelInfo,
+		Type:           webhookLogType,
+		Level:          webhookLogLevel,
 		Service:        "adapter",
 		MerchantID:     merchantID,
 		PaymentID:      paymentID,
@@ -141,13 +161,16 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		CorrelationID:  paymentID,
 		CurrentStatus:  status,
 		Timestamp:      time.Now().UTC(),
-		Message:        "YooKassa webhook processed",
-		Details:        "YooKassa webhook processed",
+		Message:        webhookLogMessage,
+		Details:        webhookLogMessage,
 		Context: map[string]string{
 			"provider":                "yookassa",
 			"yookassa_event":          notification.Event,
 			"external_transaction_id": payment.ID,
 			"provider_status":         providerStatus,
+			"cancellation_party":      payment.CancellationDetails.Party,
+			"cancellation_reason":     payment.CancellationDetails.Reason,
+			"gateway_error_code":      gatewayErrorCodeFromYooKassaCancellation(payment.CancellationDetails.Reason),
 			"paid":                    strconv.FormatBool(payment.Paid),
 			"test":                    strconv.FormatBool(payment.Test),
 		},
@@ -259,6 +282,33 @@ func (h *YooKassaWebhookHandler) log(ctx context.Context, event contracts.Paymen
 func ctxWithTimeout(parent context.Context) context.Context {
 	ctx, _ := context.WithTimeout(parent, 3*time.Second)
 	return ctx
+}
+
+func gatewayErrorCodeFromYooKassaCancellation(reason string) string {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	if reason == "" {
+		return "YOOKASSA_PAYMENT_DECLINED"
+	}
+	return "YOOKASSA_" + strings.ToUpper(reason)
+}
+
+func fraudResultFromYooKassaCancellation(reason string) string {
+	if strings.EqualFold(strings.TrimSpace(reason), "fraud_suspected") {
+		return "BLOCKED_BY_PROVIDER_FRAUD"
+	}
+	return "DECLINED_BY_PROVIDER"
+}
+
+func formatYooKassaDeclineMessage(party string, reason string) string {
+	party = strings.TrimSpace(party)
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "payment was canceled by YooKassa"
+	}
+	if party == "" {
+		return reason
+	}
+	return fmt.Sprintf("%s: %s", party, reason)
 }
 
 func mapYooKassaStatus(status string) string {
