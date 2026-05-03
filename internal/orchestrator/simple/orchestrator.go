@@ -45,7 +45,7 @@ func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestr
 		store = stores[0]
 	}
 
-	return newSimpleOrchestrator(store, noOpLogger{}, nil)
+	return newSimpleOrchestrator(store, noOpLogger{}, nil, notifications.NewDummyNotifications())
 }
 
 // NewSimpleOrchestratorWithLogger создаёт оркестратор с явной реализацией TransactionStore и EventLogger.
@@ -62,20 +62,36 @@ func NewSimpleOrchestratorWithDependencies(
 	tokenizerService contracts.Tokenizer,
 	adapterFactories ...*adapter.Factory,
 ) *SimpleOrchestrator {
+	return NewSimpleOrchestratorWithServices(store, eventLogger, tokenizerService, nil, adapterFactories...)
+}
+
+// NewSimpleOrchestratorWithServices создаёт оркестратор с явно переданными реализациями подсистем.
+// Используется, когда подключены PostgreSQL-хранилище, логирование, токенизация и сервис уведомлений.
+func NewSimpleOrchestratorWithServices(
+	store contracts.TransactionStore,
+	eventLogger contracts.EventLogger,
+	tokenizerService contracts.Tokenizer,
+	notificationService contracts.Notifications,
+	adapterFactories ...*adapter.Factory,
+) *SimpleOrchestrator {
 	if store == nil {
 		store = storage.NewInMemoryTransactionStore()
 	}
 	if eventLogger == nil {
 		eventLogger = noOpLogger{}
 	}
+	if notificationService == nil {
+		notificationService = notifications.NewDummyNotifications()
+	}
 
-	return newSimpleOrchestrator(store, eventLogger, tokenizerService, adapterFactories...)
+	return newSimpleOrchestrator(store, eventLogger, tokenizerService, notificationService, adapterFactories...)
 }
 
 func newSimpleOrchestrator(
 	store contracts.TransactionStore,
 	eventLogger contracts.EventLogger,
 	tokenizerService contracts.Tokenizer,
+	notificationService contracts.Notifications,
 	adapterFactories ...*adapter.Factory,
 ) *SimpleOrchestrator {
 	if tokenizerService == nil {
@@ -91,7 +107,7 @@ func newSimpleOrchestrator(
 		antiFraud:      antifraud.NewDummyAntiFraud(),
 		tokenizer:      tokenizerService,
 		adapterFactory: adapterFactory,
-		notifications:  notifications.NewDummyNotifications(),
+		notifications:  notificationService,
 
 		store:  store,
 		logger: eventLogger,
@@ -260,11 +276,15 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, finalStatus)
 	_ = o.workflow.CompleteSession(ctx, sessionID, finalStatus)
 
-	// 9) Notifications.
-	_ = o.notifications.Notify(ctx, resp)
-	_ = o.logEvent(ctx, validatedReq, contracts.EventPaymentResponseSent, contracts.LogLevelInfo, "notifications", finalStatus, "Payment response sent to merchant", map[string]string{
+	// 9) Response + merchant notifications.
+	_ = o.logEvent(ctx, validatedReq, contracts.EventPaymentResponseSent, contracts.LogLevelInfo, "orchestrator", finalStatus, "Payment response sent to merchant", map[string]string{
 		"retry_count": strconv.Itoa(retryCount),
 	})
+	if err := o.notifications.Notify(ctx, resp); err != nil {
+		_ = o.logEvent(ctx, validatedReq, contracts.EventNotificationFailed, contracts.LogLevelWarn, "notifications", finalStatus, "Merchant notification failed", map[string]string{
+			"error_message": err.Error(),
+		})
+	}
 
 	// 10) Save for idempotency.
 	_ = o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, resp.CurrentStatus, mustMarshalPaymentResponse(resp), nowUTC())

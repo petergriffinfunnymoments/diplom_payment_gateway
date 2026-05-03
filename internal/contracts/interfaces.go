@@ -12,14 +12,17 @@ import (
 type PaymentEventType string
 
 const (
-	EventPaymentReceived       PaymentEventType = "payment_received"
-	EventPaymentValidated      PaymentEventType = "payment_validated"
-	EventFraudChecked          PaymentEventType = "fraud_checked"
-	EventTokenized             PaymentEventType = "tokenized"
-	EventAdapterCalled         PaymentEventType = "adapter_called"
-	EventAdapterResultReceived PaymentEventType = "adapter_result_received"
-	EventPaymentResponseSent   PaymentEventType = "payment_response_sent"
-	EventPaymentFailed         PaymentEventType = "payment_failed"
+	EventPaymentReceived         PaymentEventType = "payment_received"
+	EventPaymentValidated        PaymentEventType = "payment_validated"
+	EventFraudChecked            PaymentEventType = "fraud_checked"
+	EventTokenized               PaymentEventType = "tokenized"
+	EventAdapterCalled           PaymentEventType = "adapter_called"
+	EventAdapterResultReceived   PaymentEventType = "adapter_result_received"
+	EventPaymentResponseSent     PaymentEventType = "payment_response_sent"
+	EventPaymentFailed           PaymentEventType = "payment_failed"
+	EventNotificationSent        PaymentEventType = "notification_sent"
+	EventNotificationFailed      PaymentEventType = "notification_failed"
+	EventMerchantWebhookReceived PaymentEventType = "merchant_webhook_received"
 )
 
 type LogLevel string

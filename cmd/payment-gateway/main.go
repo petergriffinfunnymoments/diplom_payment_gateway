@@ -18,6 +18,7 @@ import (
 	webhooks "payment-gateway/internal/httpapi/webhooks"
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
 	paymentlogging "payment-gateway/internal/subsystems/logging"
+	paymentnotifications "payment-gateway/internal/subsystems/notifications"
 	"payment-gateway/internal/subsystems/storage"
 	paymenttokenizer "payment-gateway/internal/subsystems/tokenizer"
 )
@@ -67,6 +68,7 @@ func main() {
 	store := storage.NewInMemoryTransactionStore()
 	var eventLogger contracts.EventLogger = paymentlogging.NewDummyEventLogger(logger)
 	var tokenizerService contracts.Tokenizer = paymenttokenizer.NewDummyTokenizer()
+	var notificationService contracts.Notifications = paymentnotifications.NewDummyNotifications()
 
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		pgStore, err := storage.NewPostgresTransactionStoreAsContract(context.Background(), dsn)
@@ -97,13 +99,26 @@ func main() {
 		}
 		tokenizerService = pgTokenizer
 		logger.Log("level", "info", "msg", "postgres tokenizer connected")
+
+		webhookNotifications, err := paymentnotifications.NewWebhookNotificationsFromEnv(context.Background(), dsn, eventLogger)
+		if err != nil {
+			logger.Log("level", "error", "msg", "failed to initialize merchant notifications", "err", err.Error())
+			os.Exit(1)
+		}
+		notificationService = webhookNotifications
+		if os.Getenv("MERCHANT_WEBHOOK_URL") != "" {
+			logger.Log("level", "info", "msg", "merchant webhook notifications enabled")
+		} else {
+			logger.Log("level", "warn", "msg", "MERCHANT_WEBHOOK_URL is empty; merchant webhook notifications disabled")
+		}
 	} else {
 		logger.Log("level", "warn", "msg", "DATABASE_URL is empty; using in-memory transaction store and console event logger")
 	}
 
-	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithDependencies(store, eventLogger, tokenizerService)
+	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithServices(store, eventLogger, tokenizerService, notificationService)
 	mux.Handle("/payments", payments.NewCreatePaymentHandler(orchestrator, logger))
-	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandler(store, eventLogger))
+	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))
+	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))
 
 	// Статика (web/index.html и web/static/*)
 	mux.Handle("/", http.FileServer(http.Dir("web")))

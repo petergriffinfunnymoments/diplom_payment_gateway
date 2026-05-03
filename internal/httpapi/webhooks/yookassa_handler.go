@@ -15,26 +15,32 @@ import (
 )
 
 type YooKassaWebhookHandler struct {
-	store     contracts.TransactionStore
-	logger    contracts.EventLogger
-	shopID    string
-	secretKey string
-	apiURL    string
-	client    *http.Client
+	store         contracts.TransactionStore
+	logger        contracts.EventLogger
+	notifications contracts.Notifications
+	shopID        string
+	secretKey     string
+	apiURL        string
+	client        *http.Client
 }
 
 func NewYooKassaWebhookHandler(store contracts.TransactionStore, logger contracts.EventLogger) http.Handler {
+	return NewYooKassaWebhookHandlerWithNotifications(store, logger, nil)
+}
+
+func NewYooKassaWebhookHandlerWithNotifications(store contracts.TransactionStore, logger contracts.EventLogger, notifications contracts.Notifications) http.Handler {
 	apiURL := strings.TrimSpace(os.Getenv("YOOKASSA_API_BASE_URL"))
 	if apiURL == "" {
 		apiURL = "https://api.yookassa.ru/v3"
 	}
 
 	return &YooKassaWebhookHandler{
-		store:     store,
-		logger:    logger,
-		shopID:    strings.TrimSpace(os.Getenv("YOOKASSA_SHOP_ID")),
-		secretKey: strings.TrimSpace(os.Getenv("YOOKASSA_SECRET_KEY")),
-		apiURL:    strings.TrimRight(apiURL, "/"),
+		store:         store,
+		logger:        logger,
+		notifications: notifications,
+		shopID:        strings.TrimSpace(os.Getenv("YOOKASSA_SHOP_ID")),
+		secretKey:     strings.TrimSpace(os.Getenv("YOOKASSA_SECRET_KEY")),
+		apiURL:        strings.TrimRight(apiURL, "/"),
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
@@ -146,6 +152,28 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			"test":                    strconv.FormatBool(payment.Test),
 		},
 	})
+
+	if h.notifications != nil {
+		if err := h.notifications.Notify(r.Context(), resp); err != nil {
+			_ = h.log(r.Context(), contracts.PaymentEvent{
+				Type:           contracts.EventNotificationFailed,
+				Level:          contracts.LogLevelWarn,
+				Service:        "notifications",
+				MerchantID:     merchantID,
+				PaymentID:      paymentID,
+				IdempotencyKey: idempotencyKey,
+				CorrelationID:  paymentID,
+				CurrentStatus:  status,
+				Timestamp:      time.Now().UTC(),
+				Message:        "Merchant notification after YooKassa webhook failed",
+				Details:        "Merchant notification after YooKassa webhook failed",
+				Context: map[string]string{
+					"provider":      "yookassa",
+					"error_message": err.Error(),
+				},
+			})
+		}
+	}
 
 	// Для ЮKassa важно вернуть HTTP 200. Тело ответа она игнорирует.
 	w.WriteHeader(http.StatusOK)
