@@ -294,11 +294,29 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 
 func (o *SimpleOrchestrator) failAndSave(ctx context.Context, req dto.CreatePaymentRequest, status string, code string, msg string, service string) (dto.PaymentResponse, error) {
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, status)
+
 	resp := buildErrorResponse(req, status, code, msg)
+	if code == "ANTIFRAUD_DECLINED" {
+		resp.TransactionDetails.FraudCheckResult = "BLOCKED"
+	} else if service == "antifraud" {
+		resp.TransactionDetails.FraudCheckResult = "ERROR"
+	}
+
 	_ = o.logEvent(ctx, req, contracts.EventPaymentFailed, contracts.LogLevelError, service, status, "Payment processing failed", map[string]string{
 		"error_code":    code,
 		"error_message": msg,
 	})
+
+	// Важно: уведомление интернет-магазину должно отправляться не только при ответе адаптера,
+	// но и при любом финальном отказе внутри шлюза: валидация, антифрод, токенизация, маршрутизация.
+	// Иначе транзакция и логи сохраняются, а таблица notification_deliveries остаётся пустой.
+	if err := o.notifications.Notify(ctx, resp); err != nil {
+		_ = o.logEvent(ctx, req, contracts.EventNotificationFailed, contracts.LogLevelWarn, "notifications", status, "Merchant notification failed", map[string]string{
+			"error_code":    code,
+			"error_message": err.Error(),
+		})
+	}
+
 	return resp, o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, status, mustMarshalPaymentResponse(resp), nowUTC())
 }
 
