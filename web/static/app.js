@@ -72,6 +72,7 @@ const els = {
   cardNumber: document.getElementById('cardNumber'),
   cardDate: document.getElementById('cardDate'),
   cvv: document.getElementById('cvv'),
+  cardSchemeHint: document.getElementById('cardSchemeHint'),
 
   // WALLET
   walletId: document.getElementById('walletId'),
@@ -250,6 +251,48 @@ function luhnCheck(cardNumber) {
   return sum % 10 === 0;
 }
 
+function detectCardScheme(cardNumber) {
+  const digits = digitsOnly(cardNumber);
+
+  if (digits.length < 4) {
+    return { code: 'UNKNOWN', label: 'не определена', provider: 'будет выбран по настройкам маршрутизации' };
+  }
+
+  const prefix4 = Number(digits.slice(0, 4));
+  const prefix2 = Number(digits.slice(0, 2));
+
+  if (prefix4 >= 2200 && prefix4 <= 2204) {
+    return { code: 'MIR', label: 'МИР', provider: 'ЮKassa' };
+  }
+
+  if (digits.startsWith('4')) {
+    return { code: 'VISA', label: 'Visa', provider: 'Stripe' };
+  }
+
+  if ((prefix2 >= 51 && prefix2 <= 55) || (prefix4 >= 2221 && prefix4 <= 2720)) {
+    return { code: 'MASTERCARD', label: 'Mastercard', provider: 'Stripe' };
+  }
+
+  return { code: 'UNKNOWN', label: 'не определена', provider: 'будет выбран по настройкам маршрутизации' };
+}
+
+function updateCardSchemeHint() {
+  if (!els.cardSchemeHint) return;
+
+  const scheme = detectCardScheme(els.cardNumber.value);
+  els.cardSchemeHint.textContent = `Платёжная система карты: ${scheme.label}. Провайдер: ${scheme.provider}.`;
+
+  els.cardSchemeHint.classList.remove('scheme-mir', 'scheme-visa', 'scheme-mastercard', 'scheme-unknown');
+  const className = scheme.code === 'MIR'
+    ? 'scheme-mir'
+    : scheme.code === 'VISA'
+      ? 'scheme-visa'
+      : scheme.code === 'MASTERCARD'
+        ? 'scheme-mastercard'
+        : 'scheme-unknown';
+  els.cardSchemeHint.classList.add(className);
+}
+
 function validateForm() {
   const method = getSelectedPaymentMethod();
   const errors = [];
@@ -366,6 +409,7 @@ function setMethodFieldsVisibility(method) {
 
   // Скрытые поля не должны блокировать отправку формы.
   [els.sbpPhone, els.cardNumber, els.cardDate, els.cvv, els.walletId].forEach(setValid);
+  updateCardSchemeHint();
 
   hideStatus();
 }
@@ -539,6 +583,7 @@ function wireInputFilters() {
   els.cardNumber.addEventListener('input', () => {
     els.cardNumber.value = digitsOnly(els.cardNumber.value).slice(0, 19);
     setValid(els.cardNumber);
+    updateCardSchemeHint();
   });
 
   els.cardDate.addEventListener('input', () => {
@@ -561,6 +606,7 @@ function wireUI() {
   // initial visibility
   setMethodFieldsVisibility(getSelectedPaymentMethod());
   wireInputFilters();
+  updateCardSchemeHint();
 
   els.paymentMethodRadios.forEach((r) => {
     r.addEventListener('change', () => setMethodFieldsVisibility(getSelectedPaymentMethod()));
@@ -601,6 +647,8 @@ function wireUI() {
       els.cvv,
       els.walletId,
     ].forEach(setValid);
+
+    updateCardSchemeHint();
 
     showStatus('Демо-данные заполнены');
     els.responseBox.classList.add('hidden');

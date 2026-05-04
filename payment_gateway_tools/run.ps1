@@ -1,11 +1,13 @@
 $env:DATABASE_URL="postgres://postgres:886540@localhost:5432/payment_gateway?sslmode=disable"
+$PUBLIC_URL="https://eleven-flies-show.loca.lt"
+
+$env:PAYMENT_RETURN_URL=$PUBLIC_URL
+$env:MERCHANT_WEBHOOK_URL="$PUBLIC_URL/merchant/webhook"
 
 $env:YOOKASSA_SHOP_ID="1348152"
 $env:YOOKASSA_SECRET_KEY="test_-piTcwmu-KCZlaEmMNFXcXD5KaYrtObHLQFGmL2GFtM"
 $env:CARD_PAYMENT_PROVIDER="yookassa"
-$env:PAYMENT_RETURN_URL="https://rude-pugs-push.loca.lt"
 
-$env:MERCHANT_WEBHOOK_URL="https://rude-pugs-push.loca.lt/merchant/webhook"
 $env:MERCHANT_WEBHOOK_SECRET="demo_secret"
 
 # Демо-ключи интернет-магазина для подписи запросов к твоему API-шлюзу.
