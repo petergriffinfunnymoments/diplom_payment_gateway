@@ -1,5 +1,52 @@
 /* eslint-disable no-console */
 
+
+// Демо-учётные данные интернет-магазина.
+// В реальной системе secret_key нельзя хранить во фронтенде: подпись должен формировать backend магазина.
+const MERCHANT_AUTH = {
+  merchantId: 'merchant_12345',
+  apiKey: 'demo_api_key',
+  secretKey: 'demo_secret_key',
+};
+
+function arrayBufferToHex(buffer) {
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function sha256Hex(text) {
+  const data = new TextEncoder().encode(text || '');
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return arrayBufferToHex(digest);
+}
+
+async function hmacSha256Hex(secret, text) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text));
+  return arrayBufferToHex(signature);
+}
+
+async function buildMerchantAuthHeaders(method, pathWithQuery, body, merchantId) {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const bodyHash = await sha256Hex(body || '');
+  const canonical = [timestamp, method.toUpperCase(), pathWithQuery, bodyHash].join('.');
+  const signature = await hmacSha256Hex(MERCHANT_AUTH.secretKey, canonical);
+
+  return {
+    'X-Merchant-ID': merchantId || MERCHANT_AUTH.merchantId,
+    'X-API-Key': MERCHANT_AUTH.apiKey,
+    'X-Timestamp': timestamp,
+    'X-Signature': signature,
+  };
+}
+
 const els = {
   form: document.getElementById('paymentForm'),
   payBtn: document.getElementById('payBtn'),
@@ -326,7 +373,7 @@ function setMethodFieldsVisibility(method) {
 function buildRequestPayload() {
   const paymentMethod = getSelectedPaymentMethod();
 
-  const merchant_id = 'merchant_12345';
+  const merchant_id = MERCHANT_AUTH.merchantId;
   const idempotency_key = safeUUID();
   const payment_id = generatePaymentId();
 
@@ -386,12 +433,16 @@ async function submitPayment() {
   els.payBtn.textContent = 'Отправляем...';
 
   try {
+    const body = JSON.stringify(payload);
+    const authHeaders = await buildMerchantAuthHeaders('POST', '/payments', body, payload.merchant_id);
+
     const res = await fetch('/payments', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
+        ...authHeaders,
       },
-      body: JSON.stringify(payload),
+      body,
     });
 
     const text = await res.text();
@@ -442,10 +493,14 @@ async function checkPaymentStatus() {
   els.checkStatusBtn.textContent = 'Проверяем...';
 
   try {
-    const res = await fetch(`/payments/${encodeURIComponent(paymentId)}?merchant_id=${encodeURIComponent(merchantId)}`, {
+    const pathWithQuery = `/payments/${encodeURIComponent(paymentId)}?merchant_id=${encodeURIComponent(merchantId)}`;
+    const authHeaders = await buildMerchantAuthHeaders('GET', pathWithQuery, '', merchantId);
+
+    const res = await fetch(pathWithQuery, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
+        ...authHeaders,
       },
     });
 

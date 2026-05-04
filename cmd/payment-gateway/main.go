@@ -18,6 +18,7 @@ import (
 	webhooks "payment-gateway/internal/httpapi/webhooks"
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
 	paymentlogging "payment-gateway/internal/subsystems/logging"
+	"payment-gateway/internal/subsystems/merchantauth"
 	paymentnotifications "payment-gateway/internal/subsystems/notifications"
 	"payment-gateway/internal/subsystems/storage"
 	paymenttokenizer "payment-gateway/internal/subsystems/tokenizer"
@@ -69,6 +70,7 @@ func main() {
 	var eventLogger contracts.EventLogger = paymentlogging.NewDummyEventLogger(logger)
 	var tokenizerService contracts.Tokenizer = paymenttokenizer.NewDummyTokenizer()
 	var notificationService contracts.Notifications = paymentnotifications.NewDummyNotifications()
+	authenticator := merchantauth.NewAuthenticator(merchantauth.NewStaticMerchantStoreFromEnv())
 
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		pgStore, err := storage.NewPostgresTransactionStoreAsContract(context.Background(), dsn)
@@ -100,6 +102,14 @@ func main() {
 		tokenizerService = pgTokenizer
 		logger.Log("level", "info", "msg", "postgres tokenizer connected")
 
+		merchantStore, err := merchantauth.NewPostgresMerchantStore(context.Background(), dsn)
+		if err != nil {
+			logger.Log("level", "error", "msg", "failed to initialize merchant authentication", "err", err.Error())
+			os.Exit(1)
+		}
+		authenticator = merchantauth.NewAuthenticator(merchantStore)
+		logger.Log("level", "info", "msg", "merchant authentication enabled")
+
 		webhookNotifications, err := paymentnotifications.NewWebhookNotificationsFromEnv(context.Background(), dsn, eventLogger)
 		if err != nil {
 			logger.Log("level", "error", "msg", "failed to initialize merchant notifications", "err", err.Error())
@@ -116,8 +126,8 @@ func main() {
 	}
 
 	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithServices(store, eventLogger, tokenizerService, notificationService)
-	mux.Handle("/payments", payments.NewCreatePaymentHandler(orchestrator, logger))
-	mux.Handle("/payments/", payments.NewGetPaymentStatusHandler(store))
+	mux.Handle("/payments", authenticator.Middleware(payments.NewCreatePaymentHandler(orchestrator, logger)))
+	mux.Handle("/payments/", authenticator.Middleware(payments.NewGetPaymentStatusHandler(store)))
 	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))
 
