@@ -6,6 +6,9 @@ const els = {
   fillDemoBtn: document.getElementById('fillDemoBtn'),
   statusBox: document.getElementById('statusBox'),
   responseBox: document.getElementById('responseBox'),
+  statusPaymentId: document.getElementById('statusPaymentId'),
+  statusMerchantId: document.getElementById('statusMerchantId'),
+  checkStatusBtn: document.getElementById('checkStatusBtn'),
 
   amount: document.getElementById('amount'),
   currency: document.getElementById('currency'),
@@ -56,6 +59,13 @@ function showResponse(obj) {
   els.responseBox.classList.remove('hidden');
   els.responseBox.textContent = JSON.stringify(obj, null, 2);
   showProviderPaymentLink(obj);
+
+  if (obj?.id && els.statusPaymentId) {
+    els.statusPaymentId.value = obj.id;
+  }
+  if (obj?.merchant_id && els.statusMerchantId) {
+    els.statusMerchantId.value = obj.merchant_id;
+  }
 }
 
 function showProviderPaymentLink(obj) {
@@ -412,6 +422,57 @@ async function submitPayment() {
   }
 }
 
+
+async function checkPaymentStatus() {
+  hideStatus();
+  els.responseBox.classList.add('hidden');
+  const oldPaymentLink = document.getElementById('providerPaymentLinkBox');
+  if (oldPaymentLink) oldPaymentLink.remove();
+
+  const paymentId = els.statusPaymentId.value.trim();
+  const merchantId = els.statusMerchantId.value.trim() || 'merchant_12345';
+
+  if (!paymentId) {
+    showStatus('Укажите payment_id для проверки статуса', true);
+    els.statusPaymentId.focus();
+    return;
+  }
+
+  els.checkStatusBtn.disabled = true;
+  els.checkStatusBtn.textContent = 'Проверяем...';
+
+  try {
+    const res = await fetch(`/payments/${encodeURIComponent(paymentId)}?merchant_id=${encodeURIComponent(merchantId)}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+
+    if (!res.ok || data?.code) {
+      showStatus(data?.message || `Ошибка HTTP ${res.status}`, true);
+      showResponse(data);
+      return;
+    }
+
+    showStatus('Актуальный статус получен');
+    showResponse(data);
+  } catch (e) {
+    showStatus('Сетевая ошибка: ' + (e?.message || String(e)), true);
+  } finally {
+    els.checkStatusBtn.disabled = false;
+    els.checkStatusBtn.textContent = 'Проверить статус';
+  }
+}
+
 function wireInputFilters() {
   [els.phone, els.sbpPhone].forEach((input) => {
     input.addEventListener('input', () => {
@@ -453,6 +514,10 @@ function wireUI() {
   els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
     await submitPayment();
+  });
+
+  els.checkStatusBtn.addEventListener('click', async () => {
+    await checkPaymentStatus();
   });
 
   els.fillDemoBtn.addEventListener('click', () => {

@@ -14,17 +14,20 @@ type InMemoryTransactionStore struct {
 	mu sync.RWMutex
 	// key: merchant_id + ":" + idempotency_key
 	byIdempotency map[string]storedTx
+	// key: merchant_id + ":" + payment_id
+	byPaymentID map[string]storedTx
 }
 
 type storedTx struct {
-	status     string
+	status      string
 	payloadJSON string
-	updatedAt  time.Time
+	updatedAt   time.Time
 }
 
 func NewInMemoryTransactionStore() contracts.TransactionStore {
 	return &InMemoryTransactionStore{
 		byIdempotency: make(map[string]storedTx),
+		byPaymentID:   make(map[string]storedTx),
 	}
 }
 
@@ -38,8 +41,6 @@ func (s *InMemoryTransactionStore) Save(
 	updatedAt time.Time,
 ) error {
 	_ = ctx
-	_ = paymentID
-
 	if merchantID == "" || idempotencyKey == "" {
 		return errors.New("merchantID and idempotencyKey are required")
 	}
@@ -56,11 +57,17 @@ func (s *InMemoryTransactionStore) Save(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.byIdempotency[key] = storedTx{
+	tx := storedTx{
 		status:      status,
 		payloadJSON: payloadJSON,
 		updatedAt:   updatedAt,
 	}
+
+	s.byIdempotency[key] = tx
+	if paymentID != "" {
+		s.byPaymentID[merchantID+":"+paymentID] = tx
+	}
+
 	return nil
 }
 
@@ -81,6 +88,30 @@ func (s *InMemoryTransactionStore) GetByIdempotencyKey(
 	defer s.mu.RUnlock()
 
 	tx, ok := s.byIdempotency[key]
+	if !ok {
+		return "", "", false, nil
+	}
+
+	return tx.status, tx.payloadJSON, true, nil
+}
+
+func (s *InMemoryTransactionStore) GetByPaymentID(
+	ctx context.Context,
+	merchantID string,
+	paymentID string,
+) (status string, payloadJSON string, found bool, err error) {
+	_ = ctx
+
+	if merchantID == "" || paymentID == "" {
+		return "", "", false, errors.New("merchantID and paymentID are required")
+	}
+
+	key := merchantID + ":" + paymentID
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	tx, ok := s.byPaymentID[key]
 	if !ok {
 		return "", "", false, nil
 	}

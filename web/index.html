@@ -200,6 +200,27 @@
       </form>
     </section>
 
+
+    <section class="card">
+      <h2>Проверка статуса платежа</h2>
+      <p class="muted">Введите payment_id или используйте последний созданный платеж.</p>
+      <div class="grid-2">
+        <label class="field">
+          <span>Payment ID</span>
+          <input id="statusPaymentId" type="text" placeholder="pay_..." />
+        </label>
+        <label class="field">
+          <span>Merchant ID</span>
+          <input id="statusMerchantId" type="text" value="merchant_12345" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn btn-secondary" id="checkStatusBtn">
+          Проверить статус
+        </button>
+      </div>
+    </section>
+
     <section class="card">
       <h2>Ответ шлюза</h2>
       <pre id="responseBox" class="response hidden"></pre>

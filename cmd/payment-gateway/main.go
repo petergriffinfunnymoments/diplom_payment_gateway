@@ -117,6 +117,7 @@ func main() {
 
 	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithServices(store, eventLogger, tokenizerService, notificationService)
 	mux.Handle("/payments", payments.NewCreatePaymentHandler(orchestrator, logger))
+	mux.Handle("/payments/", payments.NewGetPaymentStatusHandler(store))
 	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))
 

@@ -250,3 +250,28 @@ WHERE le.payment_id = (
 ORDER BY le.timestamp;
 "
 }
+
+
+function pgpayment {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$PaymentId,
+        [string]$MerchantId = "merchant_12345"
+    )
+
+    & $PSQL $env:PGURL -c "
+SELECT
+    merchant_id,
+    payment_id,
+    idempotency_key,
+    status,
+    payload_json,
+    updated_at,
+    created_at
+FROM payment_transactions
+WHERE merchant_id = '$MerchantId'
+  AND payment_id = '$PaymentId'
+ORDER BY updated_at DESC
+LIMIT 1;
+"
+}

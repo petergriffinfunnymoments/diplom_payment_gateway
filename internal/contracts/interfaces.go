@@ -103,6 +103,9 @@ type TransactionStore interface {
 
 	// GetByIdempotencyKey возвращает текущую транзакцию, если idempotencyKey уже был использован.
 	GetByIdempotencyKey(ctx context.Context, merchantID string, idempotencyKey string) (status string, payloadJSON string, found bool, err error)
+
+	// GetByPaymentID возвращает последнее сохранённое состояние платежа по payment_id.
+	GetByPaymentID(ctx context.Context, merchantID string, paymentID string) (status string, payloadJSON string, found bool, err error)
 }
 
 // -------------------- Orchestrator "containers" (5) --------------------

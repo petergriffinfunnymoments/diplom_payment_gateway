@@ -140,3 +140,37 @@ LIMIT 1
 
 	return status, string(b), true, nil
 }
+func (s *PostgresTransactionStore) GetByPaymentID(
+	ctx context.Context,
+	merchantID string,
+	paymentID string,
+) (status string, payloadJSON string, found bool, err error) {
+	if merchantID == "" || paymentID == "" {
+		return "", "", false, errors.New("merchantID and paymentID are required")
+	}
+
+	var payload map[string]any
+
+	err = s.pool.QueryRow(ctx, `
+SELECT status, payload_json
+FROM payment_transactions
+WHERE merchant_id = $1 AND payment_id = $2
+ORDER BY updated_at DESC
+LIMIT 1
+`, merchantID, paymentID).Scan(&status, &payload)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", false, nil
+		}
+
+		return "", "", false, err
+	}
+
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", false, err
+	}
+
+	return status, string(b), true, nil
+}
