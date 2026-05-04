@@ -29,6 +29,10 @@ func NewFactoryFromEnv() *Factory {
 		f.Register("tbank", a)
 	}
 
+	if a, err := NewStripeAdapterFromEnv(); err == nil {
+		f.Register("stripe", a)
+	}
+
 	return f
 }
 

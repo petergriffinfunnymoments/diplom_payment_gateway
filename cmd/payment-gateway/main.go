@@ -129,6 +129,7 @@ func main() {
 	mux.Handle("/payments", authenticator.Middleware(payments.NewCreatePaymentHandler(orchestrator, logger)))
 	mux.Handle("/payments/", authenticator.Middleware(payments.NewGetPaymentStatusHandler(store)))
 	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))
+	mux.Handle("/webhooks/stripe", webhooks.NewStripeWebhookHandler(store, eventLogger, notificationService))
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))
 
 	// Статика (web/index.html и web/static/*)

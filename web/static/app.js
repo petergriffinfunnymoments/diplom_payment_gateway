@@ -133,7 +133,7 @@ function showProviderPaymentLink(obj) {
   link.href = paymentUrl;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
-  link.textContent = 'Перейти к оплате в ЮKassa';
+  link.textContent = 'Перейти к оплате во внешней платежной системе';
 
   box.appendChild(text);
   box.appendChild(link);
