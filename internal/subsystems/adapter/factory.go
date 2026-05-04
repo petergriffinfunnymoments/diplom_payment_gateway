@@ -55,10 +55,28 @@ func (f *Factory) Get(key string) (contracts.PaymentAdapter, bool) {
 	return a, ok
 }
 
+// Resolve возвращает конкретный адаптер.
+// Если маршрутизатор уже выбрал provider (например, yookassa или stripe), фабрика просто возвращает
+// соответствующую реализацию. Для старых adapterKey вида card_adapter сохраняется fallback через env.
 func (f *Factory) Resolve(adapterKey string, paymentSystem string) (contracts.PaymentAdapter, string, error) {
-	providerKey := providerFromEnv(adapterKey, paymentSystem)
+	key := normalizeAdapterKey(adapterKey)
+
+	// Новый режим: router возвращает provider напрямую.
+	if key != "" && !isLegacyAdapterKey(key) {
+		if a, ok := f.Get(key); ok {
+			return a, key, nil
+		}
+		return nil, "", fmt.Errorf("adapter provider %q is not registered or not configured", key)
+	}
+
+	// Старый режим/fallback: выбираем provider из env, иначе dummy.
+	providerKey := providerFromEnv(key, paymentSystem)
 	if a, ok := f.Get(providerKey); ok {
 		return a, providerKey, nil
+	}
+
+	if providerKey != "dummy" {
+		return nil, "", fmt.Errorf("adapter provider %q is not registered or not configured", providerKey)
 	}
 
 	if a, ok := f.Get("dummy"); ok {
@@ -69,8 +87,8 @@ func (f *Factory) Resolve(adapterKey string, paymentSystem string) (contracts.Pa
 }
 
 func providerFromEnv(adapterKey string, paymentSystem string) string {
+	_ = paymentSystem
 	adapterKey = normalizeAdapterKey(adapterKey)
-	paymentSystem = strings.ToUpper(strings.TrimSpace(paymentSystem))
 
 	var envName string
 	switch adapterKey {
@@ -92,10 +110,16 @@ func providerFromEnv(adapterKey string, paymentSystem string) string {
 		return v
 	}
 
-	if paymentSystem != "" {
-		return strings.ToLower(paymentSystem)
-	}
 	return "dummy"
+}
+
+func isLegacyAdapterKey(v string) bool {
+	switch normalizeAdapterKey(v) {
+	case "card_adapter", "sbp_adapter", "wallet_adapter":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeAdapterKey(v string) string {

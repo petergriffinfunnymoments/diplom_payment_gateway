@@ -20,6 +20,7 @@ import (
 	paymentlogging "payment-gateway/internal/subsystems/logging"
 	"payment-gateway/internal/subsystems/merchantauth"
 	paymentnotifications "payment-gateway/internal/subsystems/notifications"
+	"payment-gateway/internal/subsystems/routing"
 	"payment-gateway/internal/subsystems/storage"
 	paymenttokenizer "payment-gateway/internal/subsystems/tokenizer"
 )
@@ -70,6 +71,7 @@ func main() {
 	var eventLogger contracts.EventLogger = paymentlogging.NewDummyEventLogger(logger)
 	var tokenizerService contracts.Tokenizer = paymenttokenizer.NewDummyTokenizer()
 	var notificationService contracts.Notifications = paymentnotifications.NewDummyNotifications()
+	var routeStore contracts.PaymentRouteStore
 	authenticator := merchantauth.NewAuthenticator(merchantauth.NewStaticMerchantStoreFromEnv())
 
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
@@ -110,6 +112,14 @@ func main() {
 		authenticator = merchantauth.NewAuthenticator(merchantStore)
 		logger.Log("level", "info", "msg", "merchant authentication enabled")
 
+		pgRouteStore, err := routing.NewPostgresPaymentRouteStoreAsContract(context.Background(), dsn)
+		if err != nil {
+			logger.Log("level", "error", "msg", "failed to initialize payment routes", "err", err.Error())
+			os.Exit(1)
+		}
+		routeStore = pgRouteStore
+		logger.Log("level", "info", "msg", "payment router storage connected")
+
 		webhookNotifications, err := paymentnotifications.NewWebhookNotificationsFromEnv(context.Background(), dsn, eventLogger)
 		if err != nil {
 			logger.Log("level", "error", "msg", "failed to initialize merchant notifications", "err", err.Error())
@@ -125,7 +135,7 @@ func main() {
 		logger.Log("level", "warn", "msg", "DATABASE_URL is empty; using in-memory transaction store and console event logger")
 	}
 
-	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithServices(store, eventLogger, tokenizerService, notificationService)
+	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithRouting(store, eventLogger, tokenizerService, notificationService, routeStore)
 	mux.Handle("/payments", authenticator.Middleware(payments.NewCreatePaymentHandler(orchestrator, logger)))
 	mux.Handle("/payments/", authenticator.Middleware(payments.NewGetPaymentStatusHandler(store)))
 	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))

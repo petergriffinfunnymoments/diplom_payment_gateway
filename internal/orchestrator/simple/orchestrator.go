@@ -45,7 +45,7 @@ func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestr
 		store = stores[0]
 	}
 
-	return newSimpleOrchestrator(store, noOpLogger{}, nil, notifications.NewDummyNotifications())
+	return newSimpleOrchestrator(store, noOpLogger{}, nil, notifications.NewDummyNotifications(), nil)
 }
 
 // NewSimpleOrchestratorWithLogger создаёт оркестратор с явной реализацией TransactionStore и EventLogger.
@@ -74,6 +74,19 @@ func NewSimpleOrchestratorWithServices(
 	notificationService contracts.Notifications,
 	adapterFactories ...*adapter.Factory,
 ) *SimpleOrchestrator {
+	return NewSimpleOrchestratorWithRouting(store, eventLogger, tokenizerService, notificationService, nil, adapterFactories...)
+}
+
+// NewSimpleOrchestratorWithRouting создаёт оркестратор с хранилищем правил маршрутизации.
+// Если routeStore передан, маршрутизатор выбирает адаптер по таблице merchant_payment_routes.
+func NewSimpleOrchestratorWithRouting(
+	store contracts.TransactionStore,
+	eventLogger contracts.EventLogger,
+	tokenizerService contracts.Tokenizer,
+	notificationService contracts.Notifications,
+	routeStore contracts.PaymentRouteStore,
+	adapterFactories ...*adapter.Factory,
+) *SimpleOrchestrator {
 	if store == nil {
 		store = storage.NewInMemoryTransactionStore()
 	}
@@ -84,7 +97,7 @@ func NewSimpleOrchestratorWithServices(
 		notificationService = notifications.NewDummyNotifications()
 	}
 
-	return newSimpleOrchestrator(store, eventLogger, tokenizerService, notificationService, adapterFactories...)
+	return newSimpleOrchestrator(store, eventLogger, tokenizerService, notificationService, routeStore, adapterFactories...)
 }
 
 func newSimpleOrchestrator(
@@ -92,6 +105,7 @@ func newSimpleOrchestrator(
 	eventLogger contracts.EventLogger,
 	tokenizerService contracts.Tokenizer,
 	notificationService contracts.Notifications,
+	routeStore contracts.PaymentRouteStore,
 	adapterFactories ...*adapter.Factory,
 ) *SimpleOrchestrator {
 	if tokenizerService == nil {
@@ -113,7 +127,7 @@ func newSimpleOrchestrator(
 		logger: eventLogger,
 
 		stateManager: newInMemoryStateManager(),
-		router:       newSimplePaymentRouter(),
+		router:       newSimplePaymentRouterWithStore(routeStore),
 		workflow:     newSimpleWorkflowEngine(),
 		retry:        newSimpleRetryHandler(),
 		callback:     newSimpleCallbackHandler(),

@@ -108,6 +108,20 @@ type TransactionStore interface {
 	GetByPaymentID(ctx context.Context, merchantID string, paymentID string) (status string, payloadJSON string, found bool, err error)
 }
 
+// PaymentRoute описывает правило выбора внешнего платежного провайдера.
+type PaymentRoute struct {
+	MerchantID    string
+	PaymentMethod dto.PaymentMethodType
+	Provider      string
+	PaymentSystem string
+	Priority      int
+}
+
+// PaymentRouteStore хранит правила маршрутизации платежей для мерчантов.
+type PaymentRouteStore interface {
+	GetActiveRoute(ctx context.Context, merchantID string, paymentMethod dto.PaymentMethodType) (route PaymentRoute, found bool, err error)
+}
+
 // -------------------- Orchestrator "containers" (5) --------------------
 
 type TransactionStateManager interface {
