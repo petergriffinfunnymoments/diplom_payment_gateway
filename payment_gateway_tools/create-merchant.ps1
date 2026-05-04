@@ -50,8 +50,22 @@ function Sql-Escape {
 
 function New-SecretHex {
     param([int]$Bytes = 32)
+
     $buffer = New-Object byte[] $Bytes
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($buffer)
+
+    # Совместимый вариант для Windows PowerShell 5.1 и PowerShell 7+.
+    # RandomNumberGenerator::Fill есть не во всех версиях .NET,
+    # поэтому используем Create().GetBytes(...).
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($buffer)
+    }
+    finally {
+        if ($null -ne $rng) {
+            $rng.Dispose()
+        }
+    }
+
     return ([System.BitConverter]::ToString($buffer)).Replace("-", "").ToLowerInvariant()
 }
 
