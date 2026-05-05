@@ -4,7 +4,7 @@
 
 - `cmd/payment-gateway/main.go`
 - `internal/orchestrator/simple/orchestrator.go`
-- `internal/subsystems/tokenizer/dummy_tokenizer.go`
+- `internal/subsystems/tokenizer/ephemeral_tokenizer.go`
 - `internal/subsystems/tokenizer/postgres_tokenizer.go`
 - `payment_gateway_tools/pg-tools.ps1` — необязательно, только если хочешь команды `pgtokens` и `pgtokenpay`
 

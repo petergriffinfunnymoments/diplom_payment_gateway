@@ -68,9 +68,9 @@ func main() {
 	mux.Handle("/health", healthHandler)
 
 	store := storage.NewInMemoryTransactionStore()
-	var eventLogger contracts.EventLogger = paymentlogging.NewDummyEventLogger(logger)
-	var tokenizerService contracts.Tokenizer = paymenttokenizer.NewDummyTokenizer()
-	var notificationService contracts.Notifications = paymentnotifications.NewDummyNotifications()
+	var eventLogger contracts.EventLogger = paymentlogging.NewConsoleEventLogger(logger)
+	var tokenizerService contracts.Tokenizer = paymenttokenizer.NewEphemeralTokenizer()
+	var notificationService contracts.Notifications = paymentnotifications.NewNoOpNotifications()
 	var routeStore contracts.PaymentRouteStore
 	authenticator := merchantauth.NewAuthenticator(merchantauth.NewStaticMerchantStoreFromEnv())
 

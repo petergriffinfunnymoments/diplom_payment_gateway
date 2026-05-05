@@ -45,7 +45,7 @@ func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestr
 		store = stores[0]
 	}
 
-	return newSimpleOrchestrator(store, noOpLogger{}, nil, notifications.NewDummyNotifications(), nil)
+	return newSimpleOrchestrator(store, noOpLogger{}, nil, notifications.NewNoOpNotifications(), nil)
 }
 
 // NewSimpleOrchestratorWithLogger создаёт оркестратор с явной реализацией TransactionStore и EventLogger.
@@ -94,7 +94,7 @@ func NewSimpleOrchestratorWithRouting(
 		eventLogger = noOpLogger{}
 	}
 	if notificationService == nil {
-		notificationService = notifications.NewDummyNotifications()
+		notificationService = notifications.NewNoOpNotifications()
 	}
 
 	return newSimpleOrchestrator(store, eventLogger, tokenizerService, notificationService, routeStore, adapterFactories...)
@@ -109,7 +109,7 @@ func newSimpleOrchestrator(
 	adapterFactories ...*adapter.Factory,
 ) *SimpleOrchestrator {
 	if tokenizerService == nil {
-		tokenizerService = tokenizer.NewDummyTokenizer()
+		tokenizerService = tokenizer.NewEphemeralTokenizer()
 	}
 	adapterFactory := adapter.NewFactoryFromEnv()
 	if len(adapterFactories) > 0 && adapterFactories[0] != nil {
@@ -117,8 +117,8 @@ func newSimpleOrchestrator(
 	}
 
 	return &SimpleOrchestrator{
-		validator:      validator.NewDummyValidator(),
-		antiFraud:      antifraud.NewDummyAntiFraud(),
+		validator:      validator.NewPaymentDataValidator(),
+		antiFraud:      antifraud.NewRuleBasedAntiFraud(),
 		tokenizer:      tokenizerService,
 		adapterFactory: adapterFactory,
 		notifications:  notificationService,

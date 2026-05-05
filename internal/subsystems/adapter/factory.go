@@ -14,7 +14,8 @@ type Factory struct {
 
 func NewFactory() *Factory {
 	f := &Factory{adapters: map[string]contracts.PaymentAdapter{}}
-	f.Register("dummy", NewDummyAdapter("DUMMY"))
+	f.Register("dummy", NewSimulatedAdapter("DUMMY"))
+	f.Register("simulated", NewSimulatedAdapter("SIMULATED"))
 	return f
 }
 
@@ -69,7 +70,7 @@ func (f *Factory) Resolve(adapterKey string, paymentSystem string) (contracts.Pa
 		return nil, "", fmt.Errorf("adapter provider %q is not registered or not configured", key)
 	}
 
-	// Старый режим/fallback: выбираем provider из env, иначе dummy.
+	// Старый режим/fallback: выбираем provider из env, иначе совместимый fallback dummy.
 	providerKey := providerFromEnv(key, paymentSystem)
 	if a, ok := f.Get(providerKey); ok {
 		return a, providerKey, nil

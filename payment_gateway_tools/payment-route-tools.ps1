@@ -56,7 +56,7 @@ function pgrouteadd {
         [string]$PaymentMethod,
 
         [Parameter(Mandatory=$true)]
-        [ValidateSet("yookassa", "stripe", "dummy", "tbank")]
+        [ValidateSet("yookassa", "stripe", "simulated", "dummy", "tbank")]
         [string]$Provider,
 
         [int]$Priority = 1,

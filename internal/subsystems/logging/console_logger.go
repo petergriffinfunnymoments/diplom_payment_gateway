@@ -8,15 +8,22 @@ import (
 	"payment-gateway/internal/contracts"
 )
 
-type DummyEventLogger struct {
+type ConsoleEventLogger struct {
 	logger log.Logger
 }
 
-func NewDummyEventLogger(logger log.Logger) contracts.EventLogger {
-	return &DummyEventLogger{logger: logger}
+func NewConsoleEventLogger(logger log.Logger) contracts.EventLogger {
+	return &ConsoleEventLogger{logger: logger}
 }
 
-func (l *DummyEventLogger) Log(ctx context.Context, event contracts.PaymentEvent) error {
+// NewDummyEventLogger оставлен для совместимости со старым кодом.
+//
+// Deprecated: use NewConsoleEventLogger.
+func NewDummyEventLogger(logger log.Logger) contracts.EventLogger {
+	return NewConsoleEventLogger(logger)
+}
+
+func (l *ConsoleEventLogger) Log(ctx context.Context, event contracts.PaymentEvent) error {
 	_ = ctx
 
 	if event.Timestamp.IsZero() {

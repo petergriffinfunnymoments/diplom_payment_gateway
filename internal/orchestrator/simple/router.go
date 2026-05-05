@@ -47,13 +47,13 @@ func (r *simplePaymentRouter) Route(
 		}
 		if found {
 			// Здесь маршрутизатор сам выбирает внешний provider для конкретного мерчанта и способа оплаты.
-			// adapterKey = provider: yookassa / stripe / dummy / mock и т.д.
+			// adapterKey = provider: yookassa / stripe / simulated / dummy и т.д.
 			return route.PaymentSystem, strings.ToLower(strings.TrimSpace(route.Provider)), nil
 		}
 	}
 
 	// Fallback для разработки: если маршрута в БД нет, используем старую логику.
-	// В этом режиме Factory может взять provider из переменных окружения или dummy.
+	// В этом режиме Factory может взять provider из переменных окружения или совместимого fallback dummy.
 	switch req.PaymentInfo.PaymentMethodData.Type {
 	case dto.PaymentMethodSBP:
 		return "SBP", "sbp_adapter", nil

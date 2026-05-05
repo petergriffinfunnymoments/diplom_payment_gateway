@@ -1,11 +1,12 @@
 # Адаптеры платежных систем
 
 В проект добавлена расширяемая фабрика адаптеров `internal/subsystems/adapter/Factory`.
-Оркестратор больше не создаёт `DummyAdapter` напрямую, а получает адаптер из фабрики по ключу маршрута и настройкам окружения.
+Оркестратор получает адаптер из фабрики по ключу маршрута и настройкам окружения.
 
 ## Поддерживаемые провайдеры
 
-- `dummy` — локальная заглушка, возвращает `CAPTURED`.
+- `simulated` — локальный эмуляционный адаптер, возвращает `CAPTURED`.
+- `dummy` — совместимый alias для старых маршрутов, использует тот же эмуляционный адаптер.
 - `yookassa` — sandbox-ready адаптер ЮKassa. Создаёт платеж через `POST https://api.yookassa.ru/v3/payments` и возвращает ссылку `confirmation_url`.
 - `tbank` — sandbox-ready адаптер T-Банк эквайринга. Инициирует платеж через `POST https://securepay.tinkoff.ru/v2/Init` и возвращает `PaymentURL`.
 
@@ -22,10 +23,10 @@ $env:PAYMENT_PROVIDER="yookassa"
 ```powershell
 $env:CARD_PAYMENT_PROVIDER="yookassa"
 $env:SBP_PAYMENT_PROVIDER="tbank"
-$env:WALLET_PAYMENT_PROVIDER="dummy"
+$env:WALLET_PAYMENT_PROVIDER="simulated"
 ```
 
-Если провайдер не настроен или его credentials отсутствуют, фабрика использует `dummy`.
+Если провайдер не настроен или его credentials отсутствуют, фабрика использует совместимый fallback `dummy`.
 
 ## ЮKassa
 

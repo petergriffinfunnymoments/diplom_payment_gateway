@@ -15,7 +15,7 @@ merchant_payment_routes
 
 - `merchant_id` — мерчант/интернет-магазин;
 - `payment_method` — способ оплаты: `Банковская карта`, `СБП`, `Цифровой кошелек`;
-- `provider` — ключ адаптера: `yookassa`, `stripe`, `dummy`, `tbank`;
+- `provider` — ключ адаптера: `yookassa`, `stripe`, `simulated`, `dummy`, `tbank`;
 - `payment_system` — имя внешней платежной системы в ответе шлюза;
 - `priority` — приоритет маршрута, меньшее значение выбирается первым;
 - `active` — включен ли маршрут.
@@ -41,10 +41,10 @@ pgrouteadd "merchant_12345" "Банковская карта" yookassa 1 YOOKASS
 pgrouteadd "merchant_books" "Банковская карта" stripe 1 STRIPE
 ```
 
-Оставить цифровой кошелек на локальном dummy-адаптере:
+Оставить цифровой кошелек на локальном эмуляционном адаптере:
 
 ```powershell
-pgrouteadd "merchant_12345" "Цифровой кошелек" dummy 1 DUMMY
+pgrouteadd "merchant_12345" "Цифровой кошелек" simulated 1 SIMULATED
 ```
 
 Посмотреть маршруты:
@@ -66,8 +66,8 @@ pgroutedisable "merchant_12345" "Банковская карта" yookassa
 2. Оркестратор вызывает маршрутизатор платежей.
 3. Маршрутизатор ищет активное правило в `merchant_payment_routes` по `merchant_id` и `payment_method`.
 4. Если правило найдено, он возвращает выбранный `provider`.
-5. Фабрика адаптеров возвращает конкретный объект адаптера: `YooKassaAdapter`, `StripeAdapter`, `DummyAdapter` и т.д.
-6. Если правила нет, используется fallback-логика: переменные окружения `CARD_PAYMENT_PROVIDER`, `SBP_PAYMENT_PROVIDER`, `WALLET_PAYMENT_PROVIDER` или `dummy`.
+5. Фабрика адаптеров возвращает конкретный объект адаптера: `YooKassaAdapter`, `StripeAdapter`, `SimulatedAdapter` и т.д.
+6. Если правила нет, используется fallback-логика: переменные окружения `CARD_PAYMENT_PROVIDER`, `SBP_PAYMENT_PROVIDER`, `WALLET_PAYMENT_PROVIDER` или совместимый provider `dummy`.
 
 ## Важное замечание
 
