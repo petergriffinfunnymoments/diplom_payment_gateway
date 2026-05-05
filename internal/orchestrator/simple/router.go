@@ -28,6 +28,18 @@ func (r *simplePaymentRouter) Route(
 ) (paymentSystem string, adapterKey string, err error) {
 	_ = fraud
 
+	// Правило маршрутизации по платёжной системе карты.
+	// Для дипломного прототипа используем упрощённое определение по BIN/IIN:
+	// МИР -> YooKassa, Visa/Mastercard -> Stripe.
+	// Если номер карты отсутствует или платёжная система не распознана,
+	// ниже сработает обычная маршрутизация по таблице merchant_payment_routes.
+	if req.PaymentInfo.PaymentMethodData.Type == dto.PaymentMethodCard {
+		cardScheme := detectCardScheme(req.PaymentInfo.CustomerData.CardNumber)
+		if ps, key, ok := providerForCardScheme(cardScheme); ok {
+			return ps, key, nil
+		}
+	}
+
 	if r.routes != nil {
 		route, found, err := r.routes.GetActiveRoute(ctx, req.MerchantID, req.PaymentInfo.PaymentMethodData.Type)
 		if err != nil {

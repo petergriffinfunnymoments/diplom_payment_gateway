@@ -186,3 +186,22 @@ select:focus {
 .provider-payment-link a {
   font-weight: 700;
 }
+
+.card-scheme-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: var(--muted, #6b7280);
+}
+
+.card-scheme-hint.scheme-mir,
+.card-scheme-hint.scheme-visa,
+.card-scheme-hint.scheme-mastercard {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.card-scheme-hint.scheme-unknown {
+  color: var(--muted, #6b7280);
+}

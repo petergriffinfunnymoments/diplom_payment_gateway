@@ -1,0 +1,7 @@
+# Local environment / secrets
+.env
+*.local.ps1
+payment_gateway_tools/run.local.ps1
+
+# Optional local configs
+payment_gateway_tools/secrets.ps1
