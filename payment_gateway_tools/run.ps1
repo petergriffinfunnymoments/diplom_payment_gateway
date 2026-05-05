@@ -1,15 +1,30 @@
-$env:DATABASE_URL="postgres://postgres:886540@localhost:5432/payment_gateway?sslmode=disable"
+# Safe launcher for payment-gateway.
+# This file is safe to commit: it contains no real secrets.
+# Put real local values in payment_gateway_tools/run.local.ps1.
 
-$env:YOOKASSA_SHOP_ID="1348152"
-$env:YOOKASSA_SECRET_KEY="test_-piTcwmu-KCZlaEmMNFXcXD5KaYrtObHLQFGmL2GFtM"
-$env:CARD_PAYMENT_PROVIDER="yookassa"
-$env:PAYMENT_RETURN_URL="https://rude-pugs-push.loca.lt"
+$ErrorActionPreference = "Stop"
 
-$env:MERCHANT_WEBHOOK_SECRET="demo_secret"
+$LocalConfig = Join-Path $PSScriptRoot "run.local.ps1"
+if (Test-Path $LocalConfig) {
+    . $LocalConfig
+} else {
+    Write-Host "Local config not found: $LocalConfig" -ForegroundColor Yellow
+    Write-Host "Create it from payment_gateway_tools/run.local.example.ps1 and put your real keys there." -ForegroundColor Yellow
 
-# Демо-ключи интернет-магазина для подписи запросов к твоему API-шлюзу.
-# Если меняешь их здесь, поменяй MERCHANT_AUTH в web/static/app.js.
-$env:MERCHANT_ID="merchant_12345"
-$env:MERCHANT_NAME="Демонстрационный интернет-магазин"
-$env:MERCHANT_API_KEY="demo_api_key"
-$env:MERCHANT_SECRET_KEY="demo_secret_key"
+    if (-not $env:DATABASE_URL) {
+        $env:DATABASE_URL = "postgres://postgres:YOUR_PASSWORD@localhost:5432/payment_gateway?sslmode=disable"
+    }
+
+    if (-not $env:PAYMENT_RETURN_URL) {
+        $PUBLIC_URL = "https://your-localtunnel-url.loca.lt"
+        $env:PAYMENT_RETURN_URL = $PUBLIC_URL
+        $env:MERCHANT_WEBHOOK_URL = "$PUBLIC_URL/merchant/webhook"
+    }
+
+    if (-not $env:MERCHANT_ID) { $env:MERCHANT_ID = "merchant_12345" }
+    if (-not $env:MERCHANT_NAME) { $env:MERCHANT_NAME = "Демонстрационный интернет-магазин" }
+    if (-not $env:MERCHANT_API_KEY) { $env:MERCHANT_API_KEY = "demo_api_key" }
+    if (-not $env:MERCHANT_SECRET_KEY) { $env:MERCHANT_SECRET_KEY = "demo_secret_key" }
+}
+
+go run ./cmd/payment-gateway

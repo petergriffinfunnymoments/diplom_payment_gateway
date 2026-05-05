@@ -1,7 +1,23 @@
-# Local environment / secrets
+# Local environment files / secrets
 .env
+.env.*
+!.env.example
 *.local.ps1
 payment_gateway_tools/run.local.ps1
-
-# Optional local configs
 payment_gateway_tools/secrets.ps1
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build artifacts
+*.exe
+*.test
+bin/
+dist/
+
+# Logs / temp
+*.log
+tmp/

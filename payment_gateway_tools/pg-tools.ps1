@@ -2,13 +2,30 @@
 # PostgreSQL helper commands
 # for payment gateway project
 # ==============================
+# Safe to commit: this file contains no real database password.
+# Put the real connection string in payment_gateway_tools/run.local.ps1
+# or set $env:PGURL in the current PowerShell session.
 
-# Укажи свою строку подключения
 $PSQL = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
-$env:PGURL = "postgres://postgres:886540@localhost:5432/payment_gateway?sslmode=disable"
+
+if (-not (Test-Path $PSQL)) {
+    $found = Get-ChildItem "C:\Program Files\PostgreSQL" -Recurse -Filter psql.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) {
+        $PSQL = $found.FullName
+    }
+}
+
+if (-not $env:PGURL) {
+    if ($env:DATABASE_URL -and ($env:DATABASE_URL -notlike "*YOUR_PASSWORD*")) {
+        $env:PGURL = $env:DATABASE_URL
+    } else {
+        $env:PGURL = "postgres://postgres:YOUR_PASSWORD@localhost:5432/payment_gateway?sslmode=disable"
+        Write-Host "PGURL is not set. Set `$env:PGURL or load run.local.ps1 before using pg-tools." -ForegroundColor Yellow
+    }
+}
 
 function pgtables {
-    psql $env:PGURL -c "\dt"
+    & $PSQL $env:PGURL -c "\dt"
 }
 
 function pgtx {
@@ -16,7 +33,7 @@ function pgtx {
         [int]$Limit = 10
     )
 
-    psql $env:PGURL -c "
+    & $PSQL $env:PGURL -c "
 SELECT
     id,
     merchant_id,
@@ -36,7 +53,7 @@ function pglogs {
         [int]$Limit = 20
     )
 
-    psql $env:PGURL -c "
+    & $PSQL $env:PGURL -c "
 SELECT
     le.timestamp,
     le.level,
@@ -59,7 +76,7 @@ function pgpay {
         [string]$PaymentId
     )
 
-    psql $env:PGURL -c "
+    & $PSQL $env:PGURL -c "
 SELECT
     le.timestamp,
     le.level,
@@ -81,7 +98,7 @@ function pgctx {
         [string]$PaymentId
     )
 
-    psql $env:PGURL -c "
+    & $PSQL $env:PGURL -c "
 SELECT
     le.timestamp,
     e.code AS event,
@@ -100,7 +117,7 @@ function pgerrors {
         [int]$Limit = 20
     )
 
-    psql $env:PGURL -c "
+    & $PSQL $env:PGURL -c "
 SELECT
     le.timestamp,
     s.code AS service,
@@ -118,7 +135,7 @@ LIMIT $Limit;
 }
 
 function pgstatus {
-    psql $env:PGURL -c "
+    & $PSQL $env:PGURL -c "
 SELECT
     status,
     COUNT(*) AS count
@@ -129,7 +146,7 @@ ORDER BY count DESC;
 }
 
 function pglogtypes {
-    psql $env:PGURL -c "
+    & $PSQL $env:PGURL -c "
 SELECT
     e.code AS event,
     COUNT(*) AS count
@@ -146,7 +163,7 @@ function pgidem {
         [string]$IdempotencyKey
     )
 
-    psql $env:PGURL -c "
+    & $PSQL $env:PGURL -c "
 SELECT
     id,
     merchant_id,
