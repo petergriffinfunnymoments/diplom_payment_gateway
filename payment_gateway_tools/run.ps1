@@ -12,7 +12,7 @@ if (Test-Path $LocalConfig) {
     Write-Host "Create it from payment_gateway_tools/run.local.example.ps1 and put your real keys there." -ForegroundColor Yellow
 
     if (-not $env:DATABASE_URL) {
-        $env:DATABASE_URL = "postgres://postgres:YOUR_PASSWORD@localhost:5432/payment_gateway?sslmode=disable"
+        $env:DATABASE_URL = "postgres://postgres:886540@localhost:5432/payment_gateway?sslmode=disable"
     }
 
     if (-not $env:PAYMENT_RETURN_URL) {
@@ -26,5 +26,3 @@ if (Test-Path $LocalConfig) {
     if (-not $env:MERCHANT_API_KEY) { $env:MERCHANT_API_KEY = "demo_api_key" }
     if (-not $env:MERCHANT_SECRET_KEY) { $env:MERCHANT_SECRET_KEY = "demo_secret_key" }
 }
-
-go run ./cmd/payment-gateway

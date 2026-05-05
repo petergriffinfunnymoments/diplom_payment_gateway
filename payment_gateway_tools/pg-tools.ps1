@@ -19,7 +19,7 @@ if (-not $env:PGURL) {
     if ($env:DATABASE_URL -and ($env:DATABASE_URL -notlike "*YOUR_PASSWORD*")) {
         $env:PGURL = $env:DATABASE_URL
     } else {
-        $env:PGURL = "postgres://postgres:YOUR_PASSWORD@localhost:5432/payment_gateway?sslmode=disable"
+        $env:PGURL = "postgres://postgres:886540@localhost:5432/payment_gateway?sslmode=disable"
         Write-Host "PGURL is not set. Set `$env:PGURL or load run.local.ps1 before using pg-tools." -ForegroundColor Yellow
     }
 }
