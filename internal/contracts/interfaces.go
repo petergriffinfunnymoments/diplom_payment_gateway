@@ -23,6 +23,11 @@ const (
 	EventNotificationSent        PaymentEventType = "notification_sent"
 	EventNotificationFailed      PaymentEventType = "notification_failed"
 	EventMerchantWebhookReceived PaymentEventType = "merchant_webhook_received"
+	EventRefundRequested         PaymentEventType = "refund_requested"
+	EventRefundAdapterCalled     PaymentEventType = "refund_adapter_called"
+	EventRefundAdapterResult     PaymentEventType = "refund_adapter_result_received"
+	EventRefundResponseSent      PaymentEventType = "refund_response_sent"
+	EventRefundFailed            PaymentEventType = "refund_failed"
 )
 
 type LogLevel string
@@ -86,6 +91,30 @@ type AdapterResult struct {
 	ErrorMessage          string
 }
 
+type RefundAdapter interface {
+	Refund(ctx context.Context, req RefundRequest) (RefundResult, error)
+}
+
+type RefundRequest struct {
+	RefundID          string
+	MerchantID        string
+	PaymentID         string
+	IdempotencyKey    string
+	ExternalPaymentID string
+	Amount            dto.AmountMoney
+	Reason            string
+	Full              bool
+	Payment           dto.PaymentResponse
+}
+
+type RefundResult struct {
+	ExternalRefundID string
+	PaymentSystem    string
+	Status           string
+	ProviderStatus   string
+	ErrorMessage     string
+}
+
 type Notifications interface {
 	// Notify отправляет результат в API-шлюз (для передачи интернет-магазину).
 	Notify(ctx context.Context, resp dto.PaymentResponse) error
@@ -106,6 +135,13 @@ type TransactionStore interface {
 
 	// GetByPaymentID возвращает последнее сохранённое состояние платежа по payment_id.
 	GetByPaymentID(ctx context.Context, merchantID string, paymentID string) (status string, payloadJSON string, found bool, err error)
+}
+
+type RefundStore interface {
+	SaveRefund(ctx context.Context, refund dto.Refund) error
+	GetRefundByID(ctx context.Context, merchantID string, refundID string) (refund dto.Refund, found bool, err error)
+	GetRefundByIdempotencyKey(ctx context.Context, merchantID string, idempotencyKey string) (refund dto.Refund, found bool, err error)
+	ListRefundsByPaymentID(ctx context.Context, merchantID string, paymentID string) ([]dto.Refund, error)
 }
 
 // PaymentRoute описывает правило выбора внешнего платежного провайдера.

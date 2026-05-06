@@ -15,8 +15,10 @@ import (
 
 	"payment-gateway/internal/contracts"
 	payments "payment-gateway/internal/httpapi/payments"
+	refunds "payment-gateway/internal/httpapi/refunds"
 	webhooks "payment-gateway/internal/httpapi/webhooks"
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
+	"payment-gateway/internal/subsystems/adapter"
 	paymentlogging "payment-gateway/internal/subsystems/logging"
 	"payment-gateway/internal/subsystems/merchantauth"
 	paymentnotifications "payment-gateway/internal/subsystems/notifications"
@@ -72,7 +74,11 @@ func main() {
 	var tokenizerService contracts.Tokenizer = paymenttokenizer.NewEphemeralTokenizer()
 	var notificationService contracts.Notifications = paymentnotifications.NewNoOpNotifications()
 	var routeStore contracts.PaymentRouteStore
+	var refundStore contracts.RefundStore
 	authenticator := merchantauth.NewAuthenticator(merchantauth.NewStaticMerchantStoreFromEnv())
+	if rs, ok := store.(contracts.RefundStore); ok {
+		refundStore = rs
+	}
 
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		pgStore, err := storage.NewPostgresTransactionStoreAsContract(context.Background(), dsn)
@@ -81,6 +87,9 @@ func main() {
 			os.Exit(1)
 		}
 		store = pgStore
+		if rs, ok := pgStore.(contracts.RefundStore); ok {
+			refundStore = rs
+		}
 		logger.Log("level", "info", "msg", "postgres transaction store connected")
 
 		env := os.Getenv("APP_ENV")
@@ -138,6 +147,8 @@ func main() {
 	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithRouting(store, eventLogger, tokenizerService, notificationService, routeStore)
 	mux.Handle("/payments", authenticator.Middleware(payments.NewCreatePaymentHandler(orchestrator, logger)))
 	mux.Handle("/payments/", authenticator.Middleware(payments.NewGetPaymentStatusHandler(store)))
+	refundHandler := refunds.NewRefundHandler(store, refundStore, adapter.NewFactoryFromEnv(), eventLogger)
+	mux.Handle("/refunds/", authenticator.Middleware(refundHandler))
 	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))
 	mux.Handle("/webhooks/stripe", webhooks.NewStripeWebhookHandler(store, eventLogger, notificationService))
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))

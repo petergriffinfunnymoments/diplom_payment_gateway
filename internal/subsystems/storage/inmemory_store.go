@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"payment-gateway/internal/contracts"
+	"payment-gateway/internal/dto"
 )
 
 type InMemoryTransactionStore struct {
@@ -16,6 +17,7 @@ type InMemoryTransactionStore struct {
 	byIdempotency map[string]storedTx
 	// key: merchant_id + ":" + payment_id
 	byPaymentID map[string]storedTx
+	refunds     map[string]storedRefund
 }
 
 type storedTx struct {
@@ -24,10 +26,15 @@ type storedTx struct {
 	updatedAt   time.Time
 }
 
+type storedRefund struct {
+	refund dto.Refund
+}
+
 func NewInMemoryTransactionStore() contracts.TransactionStore {
 	return &InMemoryTransactionStore{
 		byIdempotency: make(map[string]storedTx),
 		byPaymentID:   make(map[string]storedTx),
+		refunds:       make(map[string]storedRefund),
 	}
 }
 
@@ -117,4 +124,69 @@ func (s *InMemoryTransactionStore) GetByPaymentID(
 	}
 
 	return tx.status, tx.payloadJSON, true, nil
+}
+
+func (s *InMemoryTransactionStore) SaveRefund(ctx context.Context, refund dto.Refund) error {
+	_ = ctx
+	if refund.MerchantID == "" || refund.ID == "" {
+		return errors.New("merchantID and refundID are required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.refunds[refund.MerchantID+":"+refund.ID] = storedRefund{refund: refund}
+	return nil
+}
+
+func (s *InMemoryTransactionStore) GetRefundByID(ctx context.Context, merchantID string, refundID string) (dto.Refund, bool, error) {
+	_ = ctx
+	if merchantID == "" || refundID == "" {
+		return dto.Refund{}, false, errors.New("merchantID and refundID are required")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	refund, ok := s.refunds[merchantID+":"+refundID]
+	return refund.refund, ok, nil
+}
+
+func (s *InMemoryTransactionStore) GetRefundByIdempotencyKey(ctx context.Context, merchantID string, idempotencyKey string) (dto.Refund, bool, error) {
+	_ = ctx
+	if merchantID == "" || idempotencyKey == "" {
+		return dto.Refund{}, false, errors.New("merchantID and idempotencyKey are required")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, refund := range s.refunds {
+		if refund.refund.MerchantID == merchantID && refund.refund.IdempotencyKey == idempotencyKey {
+			return refund.refund, true, nil
+		}
+	}
+	return dto.Refund{}, false, nil
+}
+
+func (s *InMemoryTransactionStore) ListRefundsByPaymentID(ctx context.Context, merchantID string, paymentID string) ([]dto.Refund, error) {
+	_ = ctx
+	if merchantID == "" {
+		return nil, errors.New("merchantID is required")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]dto.Refund, 0)
+	for _, refund := range s.refunds {
+		if refund.refund.MerchantID != merchantID {
+			continue
+		}
+		if paymentID != "" && refund.refund.PaymentID != paymentID {
+			continue
+		}
+		result = append(result, refund.refund)
+	}
+	return result, nil
 }

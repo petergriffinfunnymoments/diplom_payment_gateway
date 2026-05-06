@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"payment-gateway/internal/contracts"
@@ -44,5 +45,26 @@ func (a *SimulatedAdapter) Send(ctx context.Context, token string, req dto.Creat
 		PaymentSystem:         a.paymentSystem,
 		Status:                string(dto.StatusCaptured),
 		ErrorMessage:          "",
+	}, nil
+}
+
+func (a *SimulatedAdapter) Refund(ctx context.Context, req contracts.RefundRequest) (contracts.RefundResult, error) {
+	_ = ctx
+
+	status := string(dto.RefundStatusSuccess)
+	providerStatus := "succeeded"
+	errorMessage := ""
+	if req.Reason == "simulate_failed" || req.PaymentID == "pay_refund_failed" {
+		status = string(dto.RefundStatusFail)
+		providerStatus = "failed"
+		errorMessage = "simulated refund failure"
+	}
+
+	return contracts.RefundResult{
+		ExternalRefundID: "rfnd_" + strings.TrimPrefix(req.RefundID, "ref_"),
+		PaymentSystem:    a.paymentSystem,
+		Status:           status,
+		ProviderStatus:   providerStatus,
+		ErrorMessage:     errorMessage,
 	}, nil
 }
