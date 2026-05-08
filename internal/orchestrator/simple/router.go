@@ -61,6 +61,8 @@ func (r *simplePaymentRouter) Route(
 		return "CARD", "card_adapter", nil
 	case dto.PaymentMethodDigitalWallet:
 		return "DIGITAL_WALLET", "wallet_adapter", nil
+	case dto.PaymentMethodDigitalRuble:
+		return "DIGITAL_RUBLE", "digital_ruble", nil
 	default:
 		return "", "", fmt.Errorf("unsupported payment method: %s", req.PaymentInfo.PaymentMethodData.Type)
 	}

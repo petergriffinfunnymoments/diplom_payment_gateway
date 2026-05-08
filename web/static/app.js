@@ -76,12 +76,18 @@ const els = {
 
   // WALLET
   walletId: document.getElementById('walletId'),
+
+  // DIGITAL RUBLE
+  digitalRubleWalletId: document.getElementById('digitalRubleWalletId'),
+  digitalRubleAccount: document.getElementById('digitalRubleAccount'),
+  digitalRubleIdentifier: document.getElementById('digitalRubleIdentifier'),
 };
 
 const PAYMENT_METHODS = {
   SBP: 'СБП',
   CARD: 'Банковская карта',
   WALLET: 'Цифровой кошелек',
+  DIGITAL_RUBLE: 'Цифровой рубль',
 };
 
 const validators = {
@@ -90,6 +96,8 @@ const validators = {
   cardDate: /^(0[1-9]|1[0-2])\/\d{2}$/,
   cvv: /^\d{3}$/,
   walletId: /^[A-Za-z0-9_-]{3,64}$/,
+  digitalRubleId: /^[A-Za-z0-9_.:-]{3,70}$/,
+  digitalRubleAccount: /^[A-Za-z0-9]{1,34}$/,
 };
 
 function showStatus(message, isError = false) {
@@ -308,6 +316,9 @@ function validateForm() {
     els.cardDate,
     els.cvv,
     els.walletId,
+    els.digitalRubleWalletId,
+    els.digitalRubleAccount,
+    els.digitalRubleIdentifier,
   ].forEach(setValid);
 
   const amount = Number(els.amount.value);
@@ -373,6 +384,21 @@ function validateForm() {
     }
   }
 
+  if (method === PAYMENT_METHODS.DIGITAL_RUBLE) {
+    if (!validators.digitalRubleId.test(els.digitalRubleWalletId.value.trim())) {
+      setInvalid(els.digitalRubleWalletId, 'ID кошелька цифрового рубля: латинские буквы, цифры, _, ., :, -, от 3 до 70 символов');
+      errors.push('ID кошелька цифрового рубля должен содержать 3-70 допустимых символов.');
+    }
+    if (els.digitalRubleAccount.value.trim() && !validators.digitalRubleAccount.test(els.digitalRubleAccount.value.trim())) {
+      setInvalid(els.digitalRubleAccount, 'Счёт цифрового рубля содержит до 34 латинских букв или цифр');
+      errors.push('Счёт цифрового рубля содержит до 34 латинских букв или цифр.');
+    }
+    if (els.digitalRubleIdentifier.value.trim() && !validators.digitalRubleId.test(els.digitalRubleIdentifier.value.trim())) {
+      setInvalid(els.digitalRubleIdentifier, 'Идентификатор получателя: латинские буквы, цифры, _, ., :, -, от 3 до 70 символов');
+      errors.push('Идентификатор получателя цифрового рубля должен содержать 3-70 допустимых символов.');
+    }
+  }
+
   if (errors.length > 0) {
     showStatus(errors[0], true);
 
@@ -393,10 +419,12 @@ function setMethodFieldsVisibility(method) {
   const sbpFields = document.getElementById('sbpFields');
   const cardFields = document.getElementById('cardFields');
   const walletFields = document.getElementById('walletFields');
+  const digitalRubleFields = document.getElementById('digitalRubleFields');
 
   sbpFields.classList.toggle('hidden', method !== PAYMENT_METHODS.SBP);
   cardFields.classList.toggle('hidden', method !== PAYMENT_METHODS.CARD);
   walletFields.classList.toggle('hidden', method !== PAYMENT_METHODS.WALLET);
+  digitalRubleFields.classList.toggle('hidden', method !== PAYMENT_METHODS.DIGITAL_RUBLE);
 
   // Required включаем только для полей выбранного способа оплаты.
   els.sbpPhone.required = method === PAYMENT_METHODS.SBP;
@@ -406,9 +434,19 @@ function setMethodFieldsVisibility(method) {
   els.cvv.required = method === PAYMENT_METHODS.CARD;
 
   els.walletId.required = method === PAYMENT_METHODS.WALLET;
+  els.digitalRubleWalletId.required = method === PAYMENT_METHODS.DIGITAL_RUBLE;
 
   // Скрытые поля не должны блокировать отправку формы.
-  [els.sbpPhone, els.cardNumber, els.cardDate, els.cvv, els.walletId].forEach(setValid);
+  [
+    els.sbpPhone,
+    els.cardNumber,
+    els.cardDate,
+    els.cvv,
+    els.walletId,
+    els.digitalRubleWalletId,
+    els.digitalRubleAccount,
+    els.digitalRubleIdentifier,
+  ].forEach(setValid);
   updateCardSchemeHint();
 
   hideStatus();
@@ -443,6 +481,9 @@ function buildRequestPayload() {
         card_date: undefined,
         CVV_code: undefined,
         digital_wallet_id: undefined,
+        digital_ruble_wallet_id: undefined,
+        digital_ruble_account: undefined,
+        digital_ruble_identifier: undefined,
       },
       created_at: nowIso(),
       description: els.description.value.trim(),
@@ -458,6 +499,10 @@ function buildRequestPayload() {
     base.payment_info.customer_data.CVV_code = els.cvv.value.trim();
   } else if (paymentMethod === PAYMENT_METHODS.WALLET) {
     base.payment_info.customer_data.digital_wallet_id = els.walletId.value.trim();
+  } else if (paymentMethod === PAYMENT_METHODS.DIGITAL_RUBLE) {
+    base.payment_info.customer_data.digital_ruble_wallet_id = els.digitalRubleWalletId.value.trim();
+    base.payment_info.customer_data.digital_ruble_account = els.digitalRubleAccount.value.trim() || undefined;
+    base.payment_info.customer_data.digital_ruble_identifier = els.digitalRubleIdentifier.value.trim() || undefined;
   }
 
   return base;
@@ -600,6 +645,18 @@ function wireInputFilters() {
     els.walletId.value = els.walletId.value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
     setValid(els.walletId);
   });
+
+  [els.digitalRubleWalletId, els.digitalRubleIdentifier].forEach((input) => {
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 70);
+      setValid(input);
+    });
+  });
+
+  els.digitalRubleAccount.addEventListener('input', () => {
+    els.digitalRubleAccount.value = els.digitalRubleAccount.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 34);
+    setValid(els.digitalRubleAccount);
+  });
 }
 
 function wireUI() {
@@ -635,6 +692,9 @@ function wireUI() {
     els.cardDate.value = '12/29';
     els.cvv.value = '123';
     els.walletId.value = 'wallet_123';
+    els.digitalRubleWalletId.value = 'dr_wallet_123';
+    els.digitalRubleAccount.value = '0000000000000000000000000000000000';
+    els.digitalRubleIdentifier.value = 'merchant:wallet:demo';
 
     [
       els.amount,
@@ -646,6 +706,9 @@ function wireUI() {
       els.cardDate,
       els.cvv,
       els.walletId,
+      els.digitalRubleWalletId,
+      els.digitalRubleAccount,
+      els.digitalRubleIdentifier,
     ].forEach(setValid);
 
     updateCardSchemeHint();

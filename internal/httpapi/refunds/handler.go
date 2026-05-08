@@ -334,6 +334,8 @@ func providerKey(paymentSystem string) string {
 		return "simulated"
 	case "DUMMY":
 		return "dummy"
+	case "DIGITAL_RUBLE":
+		return "digital_ruble"
 	default:
 		return strings.ToLower(strings.TrimSpace(paymentSystem))
 	}

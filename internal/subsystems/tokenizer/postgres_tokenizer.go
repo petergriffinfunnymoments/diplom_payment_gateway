@@ -151,6 +151,8 @@ func maskedPaymentValue(req dto.CreatePaymentRequest) string {
 		return MaskPhone(customer.Phone)
 	case dto.PaymentMethodDigitalWallet:
 		return MaskWalletID(customer.DigitalWalletID)
+	case dto.PaymentMethodDigitalRuble:
+		return MaskWalletID(firstNonEmpty(customer.DigitalRubleWalletID, customer.DigitalRubleIdentifier, customer.DigitalWalletID))
 	default:
 		return ""
 	}
@@ -211,4 +213,13 @@ func onlyDigits(s string) string {
 		}
 	}
 	return b.String()
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

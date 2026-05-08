@@ -44,6 +44,12 @@ type MerchantNotificationPayload struct {
 	CancellationParty    string          `json:"cancellation_party,omitempty"`
 	CancellationReason   string          `json:"cancellation_reason,omitempty"`
 	ExternalID           string          `json:"external_transaction_id,omitempty"`
+	QRID                 string          `json:"qr_id,omitempty"`
+	QRPayload            string          `json:"qr_payload,omitempty"`
+	QRExpiresAt          string          `json:"qr_expires_at,omitempty"`
+	ParticipantBank      string          `json:"participant_bank,omitempty"`
+	SchemaVersion        string          `json:"schema_version,omitempty"`
+	SettlementHint       string          `json:"settlement_hint,omitempty"`
 	ErrorCode            string          `json:"error_code,omitempty"`
 	ErrorMessage         string          `json:"error_message,omitempty"`
 	OccurredAt           time.Time       `json:"occurred_at"`
@@ -105,6 +111,12 @@ func (n *WebhookNotifications) Notify(ctx context.Context, resp dto.PaymentRespo
 		CancellationParty:    resp.TransactionDetails.CancellationParty,
 		CancellationReason:   resp.TransactionDetails.CancellationReason,
 		ExternalID:           resp.TransactionDetails.ExternalTransactionID,
+		QRID:                 resp.TransactionDetails.QRID,
+		QRPayload:            resp.TransactionDetails.QRPayload,
+		QRExpiresAt:          resp.TransactionDetails.QRExpiresAt,
+		ParticipantBank:      resp.TransactionDetails.ParticipantBank,
+		SchemaVersion:        resp.TransactionDetails.SchemaVersion,
+		SettlementHint:       resp.TransactionDetails.SettlementHint,
 		OccurredAt:           time.Now().UTC(),
 	}
 	if resp.Error != nil {

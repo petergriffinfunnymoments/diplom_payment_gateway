@@ -101,6 +101,10 @@
               <input type="radio" name="paymentMethod" value="Цифровой кошелек" />
               <span>Цифровой кошелек</span>
             </label>
+            <label class="radio">
+              <input type="radio" name="paymentMethod" value="Цифровой рубль" />
+              <span>Цифровой рубль</span>
+            </label>
           </div>
         </div>
 
@@ -183,6 +187,51 @@
               maxlength="64"
               pattern="^[A-Za-z0-9_-]{3,64}$"
               title="ID кошелька может содержать латинские буквы, цифры, _ и -, от 3 до 64 символов"
+            />
+          </label>
+        </div>
+
+        <div id="digitalRubleFields" class="methodFields hidden">
+          <div class="grid-2">
+            <label class="field">
+              <span>ID кошелька цифрового рубля</span>
+              <input
+                id="digitalRubleWalletId"
+                name="digitalRubleWalletId"
+                type="text"
+                placeholder="dr_wallet_123"
+                minlength="3"
+                maxlength="70"
+                pattern="^[A-Za-z0-9_.:-]{3,70}$"
+                title="ID кошелька цифрового рубля может содержать латинские буквы, цифры, _, ., :, -"
+              />
+            </label>
+
+            <label class="field">
+              <span>Счёт цифрового рубля</span>
+              <input
+                id="digitalRubleAccount"
+                name="digitalRubleAccount"
+                type="text"
+                placeholder="0000000000000000000000000000000000"
+                maxlength="34"
+                pattern="^[A-Za-z0-9]{1,34}$"
+                title="Счёт цифрового рубля содержит до 34 латинских букв или цифр"
+              />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Идентификатор получателя</span>
+            <input
+              id="digitalRubleIdentifier"
+              name="digitalRubleIdentifier"
+              type="text"
+              placeholder="merchant:wallet:demo"
+              minlength="3"
+              maxlength="70"
+              pattern="^[A-Za-z0-9_.:-]{3,70}$"
+              title="Идентификатор получателя может содержать латинские буквы, цифры, _, ., :, -"
             />
           </label>
         </div>

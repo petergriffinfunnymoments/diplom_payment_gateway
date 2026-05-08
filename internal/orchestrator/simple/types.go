@@ -30,3 +30,10 @@ func (l noOpLogger) Log(ctx context.Context, event contracts.PaymentEvent) error
 func nowUTC() time.Time {
 	return time.Now().UTC()
 }
+
+func formatOptionalTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}

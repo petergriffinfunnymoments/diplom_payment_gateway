@@ -64,7 +64,7 @@ func (s *velocityStore) recordAndCount(req dto.CreatePaymentRequest, now time.Ti
 		CardHash:   hashSensitive(onlyDigits(req.PaymentInfo.CustomerData.CardNumber)),
 		EmailHash:  hashSensitive(normalizeEmail(req.PaymentInfo.CustomerData.Email)),
 		PhoneHash:  hashSensitive(onlyDigits(req.PaymentInfo.CustomerData.Phone)),
-		WalletHash: hashSensitive(strings.ToLower(strings.TrimSpace(req.PaymentInfo.CustomerData.DigitalWalletID))),
+		WalletHash: hashSensitive(strings.ToLower(strings.TrimSpace(velocityWalletID(req)))),
 	}
 
 	s.mu.Lock()
@@ -160,6 +160,18 @@ func seenKey(req dto.CreatePaymentRequest) string {
 
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func velocityWalletID(req dto.CreatePaymentRequest) string {
+	customer := req.PaymentInfo.CustomerData
+	switch {
+	case strings.TrimSpace(customer.DigitalRubleWalletID) != "":
+		return customer.DigitalRubleWalletID
+	case strings.TrimSpace(customer.DigitalRubleIdentifier) != "":
+		return customer.DigitalRubleIdentifier
+	default:
+		return customer.DigitalWalletID
+	}
 }
 
 func hashSensitive(value string) string {

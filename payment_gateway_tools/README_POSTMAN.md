@@ -38,6 +38,7 @@ GET {{base_url}}/health
 - `GET /payments/__auth_check__ - Check current credentials`
 - `POST /payments - Card MIR`
 - `POST /payments - Card Visa`
+- `POST /payments - Digital Ruble`
 - `GET /payments/{payment_id}`
 - `POST /refunds/full/create`
 - `POST /refunds/partial/create`
@@ -63,10 +64,18 @@ GET {{base_url}}/health
 
 1. `GET /health`.
 2. `Merchant Auth / GET /payments/__auth_check__ - Check current credentials`.
-3. `POST /payments - Card MIR` или `POST /payments - Card Visa`.
+3. `POST /payments - Card MIR`, `POST /payments - Card Visa` или `POST /payments - Digital Ruble`.
 4. Перейди по `payment_url`, если провайдер вернул redirect-ссылку.
 5. Дождись webhook от провайдера или проверь статус через `GET /payments/{payment_id}`.
 6. Когда платеж стал `CAPTURED`, выполни `POST /refunds/full/create` или `POST /refunds/partial/create`.
 7. Проверь возврат через `GET /refunds/status` или `GET /refunds/search`.
 
 Для локальной проверки без реального провайдера используй маршрут на provider `simulated` или совместимый `dummy`.
+
+Для цифрового рубля коллекция использует эмуляционный provider `digital_ruble`.
+Тестовые значения:
+
+- `dr_wallet_123` → `CAPTURED`;
+- `dr_wallet_declined` → `DECLINED`;
+- `dr_wallet_error` → `FAILED`;
+- `dr_wallet_pending` → `PENDING`.

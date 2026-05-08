@@ -20,11 +20,13 @@ const (
 )
 
 var (
-	phoneRegexp      = regexp.MustCompile(`^\+7\d{10}$`)
-	cardDateRegexp   = regexp.MustCompile(`^(0[1-9]|1[0-2])/\d{2}$`)
-	cardDigitsRegexp = regexp.MustCompile(`^\d{13,19}$`)
-	cvvRegexp        = regexp.MustCompile(`^\d{3,4}$`)
-	walletIDRegexp   = regexp.MustCompile(`^[A-Za-z0-9_-]{3,64}$`)
+	phoneRegexp        = regexp.MustCompile(`^\+7\d{10}$`)
+	cardDateRegexp     = regexp.MustCompile(`^(0[1-9]|1[0-2])/\d{2}$`)
+	cardDigitsRegexp   = regexp.MustCompile(`^\d{13,19}$`)
+	cvvRegexp          = regexp.MustCompile(`^\d{3,4}$`)
+	walletIDRegexp     = regexp.MustCompile(`^[A-Za-z0-9_-]{3,64}$`)
+	drIdentifierRegexp = regexp.MustCompile(`^[A-Za-z0-9_.:-]{3,70}$`)
+	drAccountRegexp    = regexp.MustCompile(`^[A-Za-z0-9]{1,34}$`)
 )
 
 // PaymentDataValidator — реальный модуль валидации платежных данных.
@@ -45,6 +47,8 @@ func NewPaymentDataValidator() contracts.PaymentValidator {
 	_ = v.RegisterValidation("card_exp", validateCardExpiration)
 	_ = v.RegisterValidation("cvv", validateCVV)
 	_ = v.RegisterValidation("wallet_id", validateWalletID)
+	_ = v.RegisterValidation("digital_ruble_identifier", validateDigitalRubleIdentifier)
+	_ = v.RegisterValidation("digital_ruble_account", validateDigitalRubleAccount)
 	_ = v.RegisterValidation("payment_status", validatePaymentStatus)
 
 	return &PaymentDataValidator{validate: v}
@@ -99,12 +103,15 @@ type paymentMethodDataValidationModel struct {
 }
 
 type customerDataValidationModel struct {
-	Email           string `validate:"omitempty,email,max=254"`
-	Phone           string `validate:"omitempty,phone_ru"`
-	CardNumber      string `validate:"omitempty,card_number"`
-	CardDate        string `validate:"omitempty,card_exp"`
-	CvvCode         string `validate:"omitempty,cvv"`
-	DigitalWalletID string `validate:"omitempty,wallet_id"`
+	Email                  string `validate:"omitempty,email,max=254"`
+	Phone                  string `validate:"omitempty,phone_ru"`
+	CardNumber             string `validate:"omitempty,card_number"`
+	CardDate               string `validate:"omitempty,card_exp"`
+	CvvCode                string `validate:"omitempty,cvv"`
+	DigitalWalletID        string `validate:"omitempty,wallet_id"`
+	DigitalRubleWalletID   string `validate:"omitempty,digital_ruble_identifier"`
+	DigitalRubleAccount    string `validate:"omitempty,digital_ruble_account"`
+	DigitalRubleIdentifier string `validate:"omitempty,digital_ruble_identifier"`
 }
 
 func toValidationModel(req dto.CreatePaymentRequest) createPaymentValidationModel {
@@ -122,12 +129,15 @@ func toValidationModel(req dto.CreatePaymentRequest) createPaymentValidationMode
 				Type: string(req.PaymentInfo.PaymentMethodData.Type),
 			},
 			CustomerData: customerDataValidationModel{
-				Email:           req.PaymentInfo.CustomerData.Email,
-				Phone:           req.PaymentInfo.CustomerData.Phone,
-				CardNumber:      req.PaymentInfo.CustomerData.CardNumber,
-				CardDate:        req.PaymentInfo.CustomerData.CardDate,
-				CvvCode:         req.PaymentInfo.CustomerData.CvvCode,
-				DigitalWalletID: req.PaymentInfo.CustomerData.DigitalWalletID,
+				Email:                  req.PaymentInfo.CustomerData.Email,
+				Phone:                  req.PaymentInfo.CustomerData.Phone,
+				CardNumber:             req.PaymentInfo.CustomerData.CardNumber,
+				CardDate:               req.PaymentInfo.CustomerData.CardDate,
+				CvvCode:                req.PaymentInfo.CustomerData.CvvCode,
+				DigitalWalletID:        req.PaymentInfo.CustomerData.DigitalWalletID,
+				DigitalRubleWalletID:   req.PaymentInfo.CustomerData.DigitalRubleWalletID,
+				DigitalRubleAccount:    req.PaymentInfo.CustomerData.DigitalRubleAccount,
+				DigitalRubleIdentifier: req.PaymentInfo.CustomerData.DigitalRubleIdentifier,
 			},
 			CreatedAt:   req.PaymentInfo.CreatedAt,
 			Description: req.PaymentInfo.Description,
@@ -152,6 +162,9 @@ func normalizeRequest(req dto.CreatePaymentRequest) dto.CreatePaymentRequest {
 	customer.CardDate = strings.TrimSpace(customer.CardDate)
 	customer.CvvCode = strings.TrimSpace(customer.CvvCode)
 	customer.DigitalWalletID = strings.TrimSpace(customer.DigitalWalletID)
+	customer.DigitalRubleWalletID = strings.TrimSpace(customer.DigitalRubleWalletID)
+	customer.DigitalRubleAccount = strings.TrimSpace(customer.DigitalRubleAccount)
+	customer.DigitalRubleIdentifier = strings.TrimSpace(customer.DigitalRubleIdentifier)
 	req.PaymentInfo.CustomerData = customer
 
 	return req
@@ -182,7 +195,7 @@ func validatePaymentStatus(fl playground.FieldLevel) bool {
 
 func validatePaymentMethod(fl playground.FieldLevel) bool {
 	switch dto.PaymentMethodType(fl.Field().String()) {
-	case dto.PaymentMethodSBP, dto.PaymentMethodCard, dto.PaymentMethodDigitalWallet:
+	case dto.PaymentMethodSBP, dto.PaymentMethodCard, dto.PaymentMethodDigitalWallet, dto.PaymentMethodDigitalRuble:
 		return true
 	default:
 		return false
@@ -226,6 +239,14 @@ func validateWalletID(fl playground.FieldLevel) bool {
 	return walletIDRegexp.MatchString(fl.Field().String())
 }
 
+func validateDigitalRubleIdentifier(fl playground.FieldLevel) bool {
+	return drIdentifierRegexp.MatchString(fl.Field().String())
+}
+
+func validateDigitalRubleAccount(fl playground.FieldLevel) bool {
+	return drAccountRegexp.MatchString(fl.Field().String())
+}
+
 func validatePaymentMethodSpecificFields(req dto.CreatePaymentRequest) error {
 	customer := req.PaymentInfo.CustomerData
 
@@ -251,6 +272,10 @@ func validatePaymentMethodSpecificFields(req dto.CreatePaymentRequest) error {
 	case dto.PaymentMethodDigitalWallet:
 		if customer.DigitalWalletID == "" {
 			return errors.New("customer_data.digital_wallet_id обязателен для оплаты цифровым кошельком")
+		}
+	case dto.PaymentMethodDigitalRuble:
+		if customer.DigitalRubleWalletID == "" && customer.DigitalRubleIdentifier == "" && customer.DigitalWalletID == "" {
+			return errors.New("для оплаты цифровым рублем укажите customer_data.digital_ruble_wallet_id или customer_data.digital_ruble_identifier")
 		}
 	}
 
@@ -316,7 +341,7 @@ func validationErrorMessage(err playground.FieldError) string {
 	case "email":
 		return field + " должен быть корректным email"
 	case "payment_method":
-		return field + " должен быть одним из: СБП, Банковская карта, Цифровой кошелек"
+		return field + " должен быть одним из: СБП, Банковская карта, Цифровой кошелек, Цифровой рубль"
 	case "currency":
 		return field + " должен быть RUB"
 	case "phone_ru":
@@ -329,6 +354,10 @@ func validationErrorMessage(err playground.FieldError) string {
 		return field + " должен состоять из 3 или 4 цифр"
 	case "wallet_id":
 		return field + " должен содержать 3-64 символа: латинские буквы, цифры, _ или -"
+	case "digital_ruble_identifier":
+		return field + " должен содержать 3-70 символов: латинские буквы, цифры, _, ., :, -"
+	case "digital_ruble_account":
+		return field + " должен содержать до 34 латинских букв или цифр"
 	default:
 		return field + " не прошёл проверку " + err.Tag()
 	}
@@ -354,6 +383,9 @@ func jsonFieldName(namespace string) string {
 		"CardDate":                     "card_date",
 		"CvvCode":                      "CVV_code",
 		"DigitalWalletID":              "digital_wallet_id",
+		"DigitalRubleWalletID":         "digital_ruble_wallet_id",
+		"DigitalRubleAccount":          "digital_ruble_account",
+		"DigitalRubleIdentifier":       "digital_ruble_identifier",
 		"CreatedAt":                    "created_at",
 		"Description":                  "description",
 	}

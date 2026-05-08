@@ -13,6 +13,7 @@ const (
 	PaymentMethodSBP           PaymentMethodType = "СБП"
 	PaymentMethodCard          PaymentMethodType = "Банковская карта"
 	PaymentMethodDigitalWallet PaymentMethodType = "Цифровой кошелек"
+	PaymentMethodDigitalRuble  PaymentMethodType = "Цифровой рубль"
 )
 
 // PaymentCurrency — валютный код (для примера используется RUB).
@@ -26,12 +27,15 @@ type AmountMoney struct {
 
 // CustomerData — данные клиента (в зависимости от типа оплаты набор полей может отличаться).
 type CustomerData struct {
-	Email           string `json:"email,omitempty"`
-	Phone           string `json:"phone,omitempty"`
-	CardNumber      string `json:"card_number,omitempty"`
-	CardDate        string `json:"card_date,omitempty"`
-	CvvCode         string `json:"CVV_code,omitempty"`
-	DigitalWalletID string `json:"digital_wallet_id,omitempty"`
+	Email                  string `json:"email,omitempty"`
+	Phone                  string `json:"phone,omitempty"`
+	CardNumber             string `json:"card_number,omitempty"`
+	CardDate               string `json:"card_date,omitempty"`
+	CvvCode                string `json:"CVV_code,omitempty"`
+	DigitalWalletID        string `json:"digital_wallet_id,omitempty"`
+	DigitalRubleWalletID   string `json:"digital_ruble_wallet_id,omitempty"`
+	DigitalRubleAccount    string `json:"digital_ruble_account,omitempty"`
+	DigitalRubleIdentifier string `json:"digital_ruble_identifier,omitempty"`
 }
 
 // PaymentMethodData — данные способа оплаты.
@@ -88,6 +92,12 @@ type TransactionDetails struct {
 	CancellationParty     string `json:"cancellation_party,omitempty"`
 	CancellationReason    string `json:"cancellation_reason,omitempty"`
 	PaymentURL            string `json:"payment_url,omitempty"`
+	QRID                  string `json:"qr_id,omitempty"`
+	QRPayload             string `json:"qr_payload,omitempty"`
+	QRExpiresAt           string `json:"qr_expires_at,omitempty"`
+	ParticipantBank       string `json:"participant_bank,omitempty"`
+	SchemaVersion         string `json:"schema_version,omitempty"`
+	SettlementHint        string `json:"settlement_hint,omitempty"`
 	Token                 string `json:"token,omitempty"`
 	TokenPreview          string `json:"token_preview,omitempty"`
 	FraudCheckResult      string `json:"fraud_check_result"`

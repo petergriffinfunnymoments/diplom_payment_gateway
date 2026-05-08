@@ -88,6 +88,12 @@ type AdapterResult struct {
 	Status                string // например: CAPTURED / FAILED / PENDING
 	ProviderStatus        string // исходный статус внешней платежной системы
 	PaymentURL            string // ссылка на платежную форму, если провайдер требует подтверждение пользователя
+	QRID                  string
+	QRPayload             string
+	QRExpiresAt           time.Time
+	ParticipantBank       string
+	SchemaVersion         string
+	SettlementHint        string
 	ErrorMessage          string
 }
 

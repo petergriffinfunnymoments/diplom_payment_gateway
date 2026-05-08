@@ -244,14 +244,17 @@ func (a *RuleBasedAntiFraud) checkCard(req dto.CreatePaymentRequest) fraudRuleRe
 }
 
 func (a *RuleBasedAntiFraud) checkDigitalWallet(req dto.CreatePaymentRequest) fraudRuleResult {
-	if req.PaymentInfo.PaymentMethodData.Type != dto.PaymentMethodDigitalWallet {
+	if req.PaymentInfo.PaymentMethodData.Type != dto.PaymentMethodDigitalWallet &&
+		req.PaymentInfo.PaymentMethodData.Type != dto.PaymentMethodDigitalRuble {
 		return fraudRuleResult{}
 	}
 
-	walletID := strings.ToLower(strings.TrimSpace(req.PaymentInfo.CustomerData.DigitalWalletID))
+	walletID := strings.ToLower(strings.TrimSpace(digitalWalletRiskID(req)))
 	blockedWallets := map[string]string{
-		"blocked_wallet": "digital wallet is blocked",
-		"fraud_wallet":   "digital wallet is marked as fraudulent",
+		"blocked_wallet":    "digital wallet is blocked",
+		"fraud_wallet":      "digital wallet is marked as fraudulent",
+		"dr_wallet_blocked": "digital ruble wallet is blocked",
+		"dr_wallet_fraud":   "digital ruble wallet is marked as fraudulent",
 	}
 
 	if reason, ok := blockedWallets[walletID]; ok {
@@ -259,6 +262,18 @@ func (a *RuleBasedAntiFraud) checkDigitalWallet(req dto.CreatePaymentRequest) fr
 	}
 
 	return fraudRuleResult{}
+}
+
+func digitalWalletRiskID(req dto.CreatePaymentRequest) string {
+	customer := req.PaymentInfo.CustomerData
+	switch {
+	case strings.TrimSpace(customer.DigitalRubleWalletID) != "":
+		return customer.DigitalRubleWalletID
+	case strings.TrimSpace(customer.DigitalRubleIdentifier) != "":
+		return customer.DigitalRubleIdentifier
+	default:
+		return customer.DigitalWalletID
+	}
 }
 
 func (a *RuleBasedAntiFraud) checkPhone(req dto.CreatePaymentRequest) fraudRuleResult {

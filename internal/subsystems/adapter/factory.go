@@ -16,6 +16,7 @@ func NewFactory() *Factory {
 	f := &Factory{adapters: map[string]contracts.PaymentAdapter{}}
 	f.Register("dummy", NewSimulatedAdapter("DUMMY"))
 	f.Register("simulated", NewSimulatedAdapter("SIMULATED"))
+	f.Register("digital_ruble", NewDigitalRubleAdapterFromEnv())
 	return f
 }
 
@@ -99,6 +100,8 @@ func providerFromEnv(adapterKey string, paymentSystem string) string {
 		envName = "SBP_PAYMENT_PROVIDER"
 	case "wallet_adapter":
 		envName = "WALLET_PAYMENT_PROVIDER"
+	case "digital_ruble_adapter":
+		envName = "DIGITAL_RUBLE_PAYMENT_PROVIDER"
 	}
 
 	if envName != "" {
@@ -116,7 +119,7 @@ func providerFromEnv(adapterKey string, paymentSystem string) string {
 
 func isLegacyAdapterKey(v string) bool {
 	switch normalizeAdapterKey(v) {
-	case "card_adapter", "sbp_adapter", "wallet_adapter":
+	case "card_adapter", "sbp_adapter", "wallet_adapter", "digital_ruble_adapter":
 		return true
 	default:
 		return false

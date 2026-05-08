@@ -235,6 +235,50 @@
           }
         },
         {
+          "name": "POST /payments - Digital Ruble",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('payment_id', json.id);",
+                  "if (json.idempotency_key) pm.environment.set('idempotency_key', json.idempotency_key);",
+                  "if (json.transaction_details && json.transaction_details.qr_id) {",
+                  "  pm.environment.set('digital_ruble_qr_id', json.transaction_details.qr_id);",
+                  "}",
+                  "if (json.transaction_details && json.transaction_details.qr_payload) {",
+                  "  pm.environment.set('digital_ruble_qr_payload', json.transaction_details.qr_payload);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"current_status\": \"CREATED\",\n  \"payment_info\": {\n    \"amount\": {\n      \"value\": 1500,\n      \"currency\": \"RUB\"\n    },\n    \"payment_method_data\": {\n      \"type\": \"Цифровой рубль\"\n    },\n    \"customer_data\": {\n      \"email\": \"customer@example.com\",\n      \"phone\": \"+79991234567\",\n      \"digital_ruble_wallet_id\": \"dr_wallet_123\",\n      \"digital_ruble_account\": \"0000000000000000000000000000000000\",\n      \"digital_ruble_identifier\": \"merchant:wallet:demo\"\n    },\n    \"description\": \"Оплата заказа Postman Digital Ruble\",\n    \"created_at\": \"{{created_at}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            }
+          }
+        },
+        {
           "name": "GET /payments/{payment_id}",
           "request": {
             "method": "GET",

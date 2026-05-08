@@ -15,7 +15,7 @@ merchant_payment_routes
 
 - `merchant_id` — мерчант/интернет-магазин;
 - `payment_method` — способ оплаты: `Банковская карта`, `СБП`, `Цифровой кошелек`;
-- `provider` — ключ адаптера: `yookassa`, `stripe`, `simulated`, `dummy`, `tbank`;
+- `provider` — ключ адаптера: `yookassa`, `stripe`, `simulated`, `dummy`, `tbank`, `digital_ruble`;
 - `payment_system` — имя внешней платежной системы в ответе шлюза;
 - `priority` — приоритет маршрута, меньшее значение выбирается первым;
 - `active` — включен ли маршрут.
@@ -45,6 +45,12 @@ pgrouteadd "merchant_books" "Банковская карта" stripe 1 STRIPE
 
 ```powershell
 pgrouteadd "merchant_12345" "Цифровой кошелек" simulated 1 SIMULATED
+```
+
+Маршрут цифрового рубля через эмуляционный адаптер банка-участника:
+
+```powershell
+pgrouteadd "merchant_12345" "Цифровой рубль" digital_ruble 1 DIGITAL_RUBLE
 ```
 
 Посмотреть маршруты:
