@@ -1,6 +1,15 @@
 package logging
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+var (
+	panCandidateRegexp = regexp.MustCompile(`\b\d{13,19}\b`)
+	cvvJSONRegexp      = regexp.MustCompile(`(?i)("?(?:CVV_code|cvv|cvc|cid)"?\s*[:=]\s*"?)[0-9]{3,4}("?)*`)
+	secretRegexp       = regexp.MustCompile(`(?i)\b(sk_(?:test|live)_[A-Za-z0-9_]+|whsec_[A-Za-z0-9_]+|YOOKASSA_SECRET_KEY\s*[:=]\s*\S+|STRIPE_SECRET_KEY\s*[:=]\s*\S+)\b`)
+)
 
 func MaskCardNumber(card string) string {
 	card = digitsOnly(card)
@@ -40,6 +49,21 @@ func TokenPreview(token string) string {
 	return token[:8] + "..."
 }
 
+func MaskSensitive(value string) string {
+	if value == "" {
+		return ""
+	}
+	value = cvvJSONRegexp.ReplaceAllString(value, `${1}[REDACTED]${2}`)
+	value = secretRegexp.ReplaceAllString(value, "[REDACTED_SECRET]")
+	value = panCandidateRegexp.ReplaceAllStringFunc(value, func(candidate string) string {
+		if !luhnValid(candidate) {
+			return candidate
+		}
+		return MaskCardNumber(candidate)
+	})
+	return value
+}
+
 func digitsOnly(value string) string {
 	var b strings.Builder
 	for _, r := range value {
@@ -48,4 +72,21 @@ func digitsOnly(value string) string {
 		}
 	}
 	return b.String()
+}
+
+func luhnValid(number string) bool {
+	sum := 0
+	double := false
+	for i := len(number) - 1; i >= 0; i-- {
+		digit := int(number[i] - '0')
+		if double {
+			digit *= 2
+			if digit > 9 {
+				digit -= 9
+			}
+		}
+		sum += digit
+		double = !double
+	}
+	return sum%10 == 0
 }

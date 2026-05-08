@@ -133,6 +133,7 @@ func (h *StripeWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	} else {
 		resp.Error = nil
 	}
+	resp = resp.Sanitized()
 
 	payload, _ := json.Marshal(resp)
 	if err := h.store.Save(r.Context(), merchantID, paymentID, idempotencyKey, status, string(payload), time.Now().UTC()); err != nil {

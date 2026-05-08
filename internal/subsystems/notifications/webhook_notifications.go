@@ -82,6 +82,7 @@ func (n *WebhookNotifications) Enabled() bool {
 }
 
 func (n *WebhookNotifications) Notify(ctx context.Context, resp dto.PaymentResponse) error {
+	resp = resp.Sanitized()
 	if !n.Enabled() {
 		return nil
 	}

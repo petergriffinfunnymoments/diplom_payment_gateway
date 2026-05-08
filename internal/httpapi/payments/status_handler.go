@@ -52,7 +52,7 @@ func NewGetPaymentStatusHandler(store contracts.TransactionStore) http.Handler {
 			return statusErrorResponse{Code: "INVALID_STORED_RESPONSE", Message: err.Error()}, nil
 		}
 
-		return resp, nil
+		return resp.Sanitized(), nil
 	})
 
 	decodeGetPaymentStatusRequest := func(_ context.Context, r *http.Request) (interface{}, error) {

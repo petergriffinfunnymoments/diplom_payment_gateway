@@ -57,7 +57,7 @@ func (c *simpleCallbackHandler) HandleCallback(
 		PaymentInfo: dto.PaymentInfoResponse{
 			Amount:            req.PaymentInfo.Amount,
 			PaymentMethodData: req.PaymentInfo.PaymentMethodData,
-			CustomerData:      req.PaymentInfo.CustomerData,
+			CustomerData:      req.PaymentInfo.CustomerData.Sanitized(),
 			Description:       req.PaymentInfo.Description,
 			CreatedAt:         req.PaymentInfo.CreatedAt,
 			UpdatedAt:         nowUTC(),
@@ -67,7 +67,7 @@ func (c *simpleCallbackHandler) HandleCallback(
 			PaymentSystem:         adapterResult.PaymentSystem,
 			ProviderStatus:        adapterResult.ProviderStatus,
 			PaymentURL:            adapterResult.PaymentURL,
-			Token:                 token,
+			TokenPreview:          dto.TokenPreview(token),
 			FraudCheckResult:      fraudCheck,
 			RetryCount:            0,
 		},

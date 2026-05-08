@@ -1,6 +1,10 @@
 package dto
 
-import "time"
+import (
+	"encoding/json"
+	"strings"
+	"time"
+)
 
 // PaymentMethodType определяет тип способа оплаты.
 type PaymentMethodType string
@@ -84,7 +88,8 @@ type TransactionDetails struct {
 	CancellationParty     string `json:"cancellation_party,omitempty"`
 	CancellationReason    string `json:"cancellation_reason,omitempty"`
 	PaymentURL            string `json:"payment_url,omitempty"`
-	Token                 string `json:"token"`
+	Token                 string `json:"token,omitempty"`
+	TokenPreview          string `json:"token_preview,omitempty"`
 	FraudCheckResult      string `json:"fraud_check_result"`
 	RetryCount            int    `json:"retry_count"`
 }
@@ -92,4 +97,68 @@ type TransactionDetails struct {
 type GatewayError struct {
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+func (r PaymentResponse) Sanitized() PaymentResponse {
+	r.PaymentInfo.CustomerData = r.PaymentInfo.CustomerData.Sanitized()
+	if r.TransactionDetails.TokenPreview == "" {
+		r.TransactionDetails.TokenPreview = TokenPreview(r.TransactionDetails.Token)
+	}
+	r.TransactionDetails.Token = ""
+	return r
+}
+
+func (c CustomerData) Sanitized() CustomerData {
+	c.CardNumber = MaskCardNumber(c.CardNumber)
+	c.CvvCode = ""
+	return c
+}
+
+func SanitizePaymentPayloadJSON(payloadJSON string) string {
+	if strings.TrimSpace(payloadJSON) == "" {
+		return payloadJSON
+	}
+
+	var resp PaymentResponse
+	if err := json.Unmarshal([]byte(payloadJSON), &resp); err != nil {
+		return payloadJSON
+	}
+	if resp.ID == "" && resp.MerchantID == "" && resp.IdempotencyKey == "" {
+		return payloadJSON
+	}
+
+	b, err := json.Marshal(resp.Sanitized())
+	if err != nil {
+		return payloadJSON
+	}
+	return string(b)
+}
+
+func MaskCardNumber(card string) string {
+	digits := digitsOnly(card)
+	if len(digits) < 10 {
+		return ""
+	}
+	return digits[:6] + strings.Repeat("*", len(digits)-10) + digits[len(digits)-4:]
+}
+
+func TokenPreview(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	if len(token) <= 12 {
+		return token
+	}
+	return token[:8] + "..." + token[len(token)-4:]
+}
+
+func digitsOnly(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

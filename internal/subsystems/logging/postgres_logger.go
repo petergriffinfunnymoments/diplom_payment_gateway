@@ -160,6 +160,11 @@ func (l *PostgresEventLogger) Log(ctx context.Context, event contracts.PaymentEv
 	if event.CorrelationID == "" {
 		event.CorrelationID = event.PaymentID
 	}
+	event.Message = MaskSensitive(event.Message)
+	event.Details = MaskSensitive(event.Details)
+	for k, v := range event.Context {
+		event.Context[k] = MaskSensitive(v)
+	}
 
 	// На всякий случай создаём неизвестные service/event, чтобы логирование не ломало платежный процесс
 	// при появлении нового типа события.

@@ -38,6 +38,7 @@ func (l *ConsoleEventLogger) Log(ctx context.Context, event contracts.PaymentEve
 	if event.Message == "" {
 		event.Message = event.Details
 	}
+	event.Message = MaskSensitive(event.Message)
 
 	return l.logger.Log(
 		"level", event.Level,

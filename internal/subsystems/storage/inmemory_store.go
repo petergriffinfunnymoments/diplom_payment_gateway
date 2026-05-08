@@ -53,6 +53,7 @@ func (s *InMemoryTransactionStore) Save(
 	}
 	// В дипломе: здесь можно валидировать payloadJSON (json.Valid). Для каркаса — сделаем базовую проверку.
 	if payloadJSON != "" {
+		payloadJSON = dto.SanitizePaymentPayloadJSON(payloadJSON)
 		var tmp interface{}
 		if err := json.Unmarshal([]byte(payloadJSON), &tmp); err != nil {
 			return err

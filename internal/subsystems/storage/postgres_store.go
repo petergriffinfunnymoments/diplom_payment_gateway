@@ -110,6 +110,7 @@ func (s *PostgresTransactionStore) Save(
 	if payloadJSON == "" {
 		payloadJSON = `{}`
 	} else {
+		payloadJSON = dto.SanitizePaymentPayloadJSON(payloadJSON)
 		var tmp interface{}
 		if err := json.Unmarshal([]byte(payloadJSON), &tmp); err != nil {
 			return err

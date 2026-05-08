@@ -135,6 +135,7 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	} else {
 		resp.Error = nil
 	}
+	resp = resp.Sanitized()
 
 	payload, _ := json.Marshal(resp)
 	if err := h.store.Save(r.Context(), merchantID, paymentID, idempotencyKey, status, string(payload), time.Now().UTC()); err != nil {

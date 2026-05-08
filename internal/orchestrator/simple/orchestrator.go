@@ -156,21 +156,21 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 				PaymentInfo: dto.PaymentInfoResponse{
 					Amount:            req.PaymentInfo.Amount,
 					PaymentMethodData: req.PaymentInfo.PaymentMethodData,
-					CustomerData:      req.PaymentInfo.CustomerData,
+					CustomerData:      req.PaymentInfo.CustomerData.Sanitized(),
 					Description:       req.PaymentInfo.Description,
 					CreatedAt:         req.PaymentInfo.CreatedAt,
 					UpdatedAt:         nowUTC(),
 				},
 				TransactionDetails: dto.TransactionDetails{RetryCount: 0},
 				Error:              nil,
-			}, nil
+			}.Sanitized(), nil
 		}
 
 		var cached dto.PaymentResponse
 		if err := json.Unmarshal([]byte(payloadJSON), &cached); err != nil {
 			return dto.PaymentResponse{}, fmt.Errorf("failed to unmarshal cached response: %w", err)
 		}
-		return cached, nil
+		return cached.Sanitized(), nil
 	}
 
 	// 2) Workflow containers: start session / set status.
@@ -284,6 +284,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	if err != nil {
 		resp = buildErrorResponse(req, statusFailed, "CALLBACK_ERROR", err.Error())
 	}
+	resp = resp.Sanitized()
 	resp.TransactionDetails.RetryCount = retryCount
 
 	finalStatus := resp.CurrentStatus
@@ -361,7 +362,7 @@ func (o *SimpleOrchestrator) logEvent(
 }
 
 func mustMarshalPaymentResponse(resp dto.PaymentResponse) string {
-	b, err := json.Marshal(resp)
+	b, err := json.Marshal(resp.Sanitized())
 	if err != nil {
 		return ""
 	}
@@ -377,7 +378,7 @@ func buildErrorResponse(req dto.CreatePaymentRequest, status string, code string
 		PaymentInfo: dto.PaymentInfoResponse{
 			Amount:            req.PaymentInfo.Amount,
 			PaymentMethodData: req.PaymentInfo.PaymentMethodData,
-			CustomerData:      req.PaymentInfo.CustomerData,
+			CustomerData:      req.PaymentInfo.CustomerData.Sanitized(),
 			Description:       req.PaymentInfo.Description,
 			CreatedAt:         req.PaymentInfo.CreatedAt,
 			UpdatedAt:         nowUTC(),
@@ -387,5 +388,5 @@ func buildErrorResponse(req dto.CreatePaymentRequest, status string, code string
 			Code:    code,
 			Message: msg,
 		},
-	}
+	}.Sanitized()
 }
