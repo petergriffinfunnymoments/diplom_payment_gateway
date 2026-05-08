@@ -1,0 +1,431 @@
+{
+  "info": {
+    "_postman_id": "payment-gateway-collection",
+    "name": "Payment Gateway API",
+    "description": "Main payment gateway operations: health, payments, status checks and refunds. Merchant HMAC auth is calculated automatically by the collection pre-request script.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "function currentPathWithQuery() {",
+          "  let path = pm.request.url.getPathWithQuery ? pm.request.url.getPathWithQuery() : pm.request.url.getPath();",
+          "  return pm.variables.replaceIn(path);",
+          "}",
+          "",
+          "function renderedRawBody() {",
+          "  if (pm.request.body && pm.request.body.mode === 'raw') {",
+          "    return pm.variables.replaceIn(pm.request.body.raw || '');",
+          "  }",
+          "  return '';",
+          "}",
+          "",
+          "function prepareDynamicPaymentVariables(method, pathWithQuery) {",
+          "  const now = new Date();",
+          "  const nowMs = now.getTime();",
+          "",
+          "  if (method === 'POST' && pathWithQuery === '/payments') {",
+          "    pm.environment.set('payment_id', 'pay_' + nowMs);",
+          "    pm.environment.set('idempotency_key', 'idem_' + nowMs);",
+          "    pm.environment.set('created_at', now.toISOString());",
+          "  }",
+          "",
+          "  if (method === 'POST' && pathWithQuery === '/refunds/full/create') {",
+          "    pm.environment.set('refund_idempotency_key', 'refund_full_' + nowMs);",
+          "  }",
+          "",
+          "  if (method === 'POST' && pathWithQuery === '/refunds/partial/create') {",
+          "    pm.environment.set('refund_idempotency_key', 'refund_partial_' + nowMs);",
+          "  }",
+          "}",
+          "",
+          "function authorizeMerchantRequest() {",
+          "  const merchantId = pm.environment.get('merchant_id') || 'merchant_12345';",
+          "  const apiKey = pm.environment.get('api_key') || 'demo_api_key';",
+          "  const secretKey = pm.environment.get('secret_key') || 'demo_secret_key';",
+          "  const method = pm.request.method.toUpperCase();",
+          "  const pathWithQuery = currentPathWithQuery();",
+          "",
+          "  prepareDynamicPaymentVariables(method, pathWithQuery);",
+          "",
+          "  const timestamp = Math.floor(Date.now() / 1000).toString();",
+          "  const body = renderedRawBody();",
+          "  const bodyHash = CryptoJS.SHA256(body).toString(CryptoJS.enc.Hex);",
+          "  const canonical = `${timestamp}.${method}.${pathWithQuery}.${bodyHash}`;",
+          "  const signature = CryptoJS.HmacSHA256(canonical, secretKey).toString(CryptoJS.enc.Hex);",
+          "",
+          "  pm.environment.set('last_auth_path', pathWithQuery);",
+          "  pm.environment.set('last_body_sha256', bodyHash);",
+          "  pm.environment.set('last_canonical', canonical);",
+          "  pm.environment.set('last_signature', signature);",
+          "  console.log('merchant auth canonical:', canonical);",
+          "  console.log('merchant auth signature:', signature);",
+          "",
+          "  pm.request.headers.upsert({ key: 'X-Merchant-ID', value: merchantId });",
+          "  pm.request.headers.upsert({ key: 'X-API-Key', value: apiKey });",
+          "  pm.request.headers.upsert({ key: 'X-Timestamp', value: timestamp });",
+          "  pm.request.headers.upsert({ key: 'X-Signature', value: signature });",
+          "}",
+          "",
+          "authorizeMerchantRequest();"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Merchant Auth",
+      "item": [
+        {
+          "name": "GET /payments/__auth_check__ - Check current credentials",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Merchant authentication passed', function () {",
+                  "  pm.expect(pm.response.code).to.not.eql(401);",
+                  "});",
+                  "",
+                  "pm.test('Expected auth-check result', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.code).to.eql('PAYMENT_NOT_FOUND');",
+                  "});",
+                  "",
+                  "console.log('If response code is PAYMENT_NOT_FOUND, merchant auth is OK.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "This request intentionally asks for a non-existent payment. If merchant auth is correct, the gateway returns 404 PAYMENT_NOT_FOUND. If credentials or HMAC signature are wrong, it returns 401 AUTHENTICATION_ERROR.",
+            "url": {
+              "raw": "{{base_url}}/payments/__auth_check__?merchant_id={{merchant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "__auth_check__"
+              ],
+              "query": [
+                {
+                  "key": "merchant_id",
+                  "value": "{{merchant_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "POST /payments - Card MIR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('payment_id', json.id);",
+                  "if (json.idempotency_key) pm.environment.set('idempotency_key', json.idempotency_key);",
+                  "if (json.transaction_details && json.transaction_details.payment_url) {",
+                  "  pm.environment.set('payment_url', json.transaction_details.payment_url);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"current_status\": \"CREATED\",\n  \"payment_info\": {\n    \"amount\": {\n      \"value\": 1500,\n      \"currency\": \"RUB\"\n    },\n    \"payment_method_data\": {\n      \"type\": \"Банковская карта\"\n    },\n    \"customer_data\": {\n      \"email\": \"customer@example.com\",\n      \"phone\": \"+79991234567\",\n      \"card_number\": \"2200000000000004\",\n      \"card_date\": \"12/29\",\n      \"CVV_code\": \"123\"\n    },\n    \"description\": \"Оплата заказа Postman MIR\",\n    \"created_at\": \"{{created_at}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /payments - Card Visa",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('payment_id', json.id);",
+                  "if (json.idempotency_key) pm.environment.set('idempotency_key', json.idempotency_key);",
+                  "if (json.transaction_details && json.transaction_details.payment_url) {",
+                  "  pm.environment.set('payment_url', json.transaction_details.payment_url);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"current_status\": \"CREATED\",\n  \"payment_info\": {\n    \"amount\": {\n      \"value\": 1500,\n      \"currency\": \"RUB\"\n    },\n    \"payment_method_data\": {\n      \"type\": \"Банковская карта\"\n    },\n    \"customer_data\": {\n      \"email\": \"customer@example.com\",\n      \"phone\": \"+79991234567\",\n      \"card_number\": \"4111111111111111\",\n      \"card_date\": \"12/29\",\n      \"CVV_code\": \"123\"\n    },\n    \"description\": \"Оплата заказа Postman Visa\",\n    \"created_at\": \"{{created_at}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /payments/{payment_id}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payments/{{payment_id}}?merchant_id={{merchant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "{{payment_id}}"
+              ],
+              "query": [
+                {
+                  "key": "merchant_id",
+                  "value": "{{merchant_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refunds",
+      "item": [
+        {
+          "name": "POST /refunds/full/create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.id) pm.environment.set('refund_id', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"idempotency_key\": \"{{refund_idempotency_key}}\",\n  \"reason\": \"requested_by_customer\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/refunds/full/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "refunds",
+                "full",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /refunds/partial/create",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.id) pm.environment.set('refund_id', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"idempotency_key\": \"{{refund_idempotency_key}}\",\n  \"amount\": {\n    \"value\": 500,\n    \"currency\": \"RUB\"\n  },\n  \"reason\": \"requested_by_customer\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/refunds/partial/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "refunds",
+                "partial",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /refunds/status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/refunds/status?merchant_id={{merchant_id}}&id={{refund_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "refunds",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "merchant_id",
+                  "value": "{{merchant_id}}"
+                },
+                {
+                  "key": "id",
+                  "value": "{{refund_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /refunds/search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/refunds/search?merchant_id={{merchant_id}}&payment_id={{payment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "refunds",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "merchant_id",
+                  "value": "{{merchant_id}}"
+                },
+                {
+                  "key": "payment_id",
+                  "value": "{{payment_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "POST /merchant/webhook - demo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{payment_id}}\",\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"current_status\": \"CAPTURED\",\n  \"event\": \"demo_notification\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/merchant/webhook",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "merchant",
+                "webhook"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
