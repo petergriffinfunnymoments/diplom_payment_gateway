@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	"payment-gateway/internal/contracts"
@@ -19,12 +20,14 @@ const (
 const (
 	defaultReviewAmountLimit = 100_000.00
 	defaultBlockAmountLimit  = 500_000.00
-	maxRiskScoreBeforeReview = 50
+	maxRiskScoreBeforeReview = 30
+	maxRiskScoreBeforeBlock  = 80
 )
 
 type RuleBasedAntiFraud struct {
 	reviewAmountLimit float64
 	blockAmountLimit  float64
+	velocity          *velocityStore
 }
 
 type fraudRuleResult struct {
@@ -38,6 +41,7 @@ func NewRuleBasedAntiFraud() contracts.AntiFraud {
 	return &RuleBasedAntiFraud{
 		reviewAmountLimit: defaultReviewAmountLimit,
 		blockAmountLimit:  defaultBlockAmountLimit,
+		velocity:          newVelocityStore(),
 	}
 }
 
@@ -52,6 +56,7 @@ func (a *RuleBasedAntiFraud) Check(ctx context.Context, req dto.CreatePaymentReq
 		return contracts.AntiFraudResult{}, err
 	}
 
+	velocity := a.velocity.recordAndCount(req, time.Now().UTC())
 	ruleResults := []fraudRuleResult{
 		a.checkAmount(req),
 		a.checkCard(req),
@@ -59,6 +64,7 @@ func (a *RuleBasedAntiFraud) Check(ctx context.Context, req dto.CreatePaymentReq
 		a.checkPhone(req),
 		a.checkEmail(req),
 		a.checkDescription(req),
+		a.checkVelocity(velocity),
 	}
 
 	totalScore := 0
@@ -80,9 +86,16 @@ func (a *RuleBasedAntiFraud) Check(ctx context.Context, req dto.CreatePaymentReq
 		if result.Block {
 			return contracts.AntiFraudResult{
 				Result: ResultBlocked,
-				Reason: joinReasons(reasons),
+				Reason: fmt.Sprintf("risk score %d blocked: %s", totalScore, joinReasons(reasons)),
 			}, nil
 		}
+	}
+
+	if totalScore >= maxRiskScoreBeforeBlock {
+		return contracts.AntiFraudResult{
+			Result: ResultBlocked,
+			Reason: fmt.Sprintf("risk score %d exceeds block threshold %d: %s", totalScore, maxRiskScoreBeforeBlock, joinReasons(reasons)),
+		}, nil
 	}
 
 	if totalScore >= maxRiskScoreBeforeReview {
@@ -103,6 +116,76 @@ func (a *RuleBasedAntiFraud) Check(ctx context.Context, req dto.CreatePaymentReq
 		Result: ResultPassed,
 		Reason: "no suspicious antifraud rules triggered",
 	}, nil
+}
+
+func (a *RuleBasedAntiFraud) checkVelocity(v velocityCounts) fraudRuleResult {
+	if v.empty() {
+		return fraudRuleResult{}
+	}
+
+	reasons := make([]string, 0)
+	score := 0
+	block := false
+
+	if v.CardAttempts1h >= 5 {
+		score += 70
+		block = true
+		reasons = append(reasons, fmt.Sprintf("same card fingerprint has %d attempts in 1h", v.CardAttempts1h))
+	} else if v.CardAttempts1h >= 4 {
+		score += 40
+		reasons = append(reasons, fmt.Sprintf("same card fingerprint has %d attempts in 1h", v.CardAttempts1h))
+	}
+
+	if v.EmailAttempts30m >= 5 {
+		score += 35
+		reasons = append(reasons, fmt.Sprintf("same email has %d attempts in 30m", v.EmailAttempts30m))
+	}
+
+	if v.PhoneAttempts1h >= 6 {
+		score += 30
+		reasons = append(reasons, fmt.Sprintf("same phone has %d attempts in 1h", v.PhoneAttempts1h))
+	}
+
+	if v.WalletAttempts1h >= 6 {
+		score += 55
+		block = true
+		reasons = append(reasons, fmt.Sprintf("same wallet has %d attempts in 1h", v.WalletAttempts1h))
+	} else if v.WalletAttempts1h >= 4 {
+		score += 35
+		reasons = append(reasons, fmt.Sprintf("same wallet has %d attempts in 1h", v.WalletAttempts1h))
+	}
+
+	if v.DistinctCardsPerEmail24h >= 5 {
+		score += 60
+		reasons = append(reasons, fmt.Sprintf("email used %d distinct cards in 24h", v.DistinctCardsPerEmail24h))
+	} else if v.DistinctCardsPerEmail24h >= 3 {
+		score += 30
+		reasons = append(reasons, fmt.Sprintf("email used %d distinct cards in 24h", v.DistinctCardsPerEmail24h))
+	}
+
+	if v.DistinctCardsPerPhone24h >= 5 {
+		score += 60
+		reasons = append(reasons, fmt.Sprintf("phone used %d distinct cards in 24h", v.DistinctCardsPerPhone24h))
+	} else if v.DistinctCardsPerPhone24h >= 3 {
+		score += 30
+		reasons = append(reasons, fmt.Sprintf("phone used %d distinct cards in 24h", v.DistinctCardsPerPhone24h))
+	}
+
+	if v.MerchantAttempts5m >= 30 {
+		score += 20
+		reasons = append(reasons, fmt.Sprintf("merchant has %d attempts in 5m", v.MerchantAttempts5m))
+	}
+
+	if score == 0 {
+		return fraudRuleResult{}
+	}
+
+	return fraudRuleResult{
+		Name:   "velocity_scorecard",
+		Score:  score,
+		Block:  block,
+		Reason: strings.Join(reasons, "; "),
+	}
 }
 
 func (a *RuleBasedAntiFraud) checkAmount(req dto.CreatePaymentRequest) fraudRuleResult {
