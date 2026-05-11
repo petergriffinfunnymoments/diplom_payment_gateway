@@ -17,8 +17,9 @@ payment_gateway_tools/merchant-admin-tools.ps1
 2. генерирует `api_key`;
 3. генерирует `secret_key`;
 4. считает SHA-256 hash от `api_key`;
-5. записывает мерчанта в PostgreSQL;
-6. выводит данные, которые нужно передать интернет-магазину.
+5. при включённом `SECRET_PROTECTOR=vault_transit` шифрует `secret_key` через HashiCorp Vault;
+6. записывает мерчанта в PostgreSQL;
+7. выводит данные, которые нужно передать интернет-магазину.
 
 ## Запуск
 
@@ -53,6 +54,14 @@ webhook_url
 ```
 
 `secret_key` нельзя передавать в запросах. Он используется магазином только для формирования HMAC-подписи.
+
+Если включён Vault, в БД хранится не открытый `secret_key`, а значение вида:
+
+```text
+vault:v1:<ciphertext>
+```
+
+Подробная настройка описана в [README_VAULT_KEY_MANAGEMENT.md](README_VAULT_KEY_MANAGEMENT.md).
 
 ## Проверка
 

@@ -118,10 +118,19 @@ func (r PaymentResponse) Sanitized() PaymentResponse {
 	return r
 }
 
-func (c CustomerData) Sanitized() CustomerData {
-	c.CardNumber = MaskCardNumber(c.CardNumber)
+func (r CreatePaymentRequest) WithoutSensitiveAuthenticationData() CreatePaymentRequest {
+	r.PaymentInfo.CustomerData = r.PaymentInfo.CustomerData.WithoutSensitiveAuthenticationData()
+	return r
+}
+
+func (c CustomerData) WithoutSensitiveAuthenticationData() CustomerData {
 	c.CvvCode = ""
 	return c
+}
+
+func (c CustomerData) Sanitized() CustomerData {
+	c.CardNumber = MaskCardNumber(c.CardNumber)
+	return c.WithoutSensitiveAuthenticationData()
 }
 
 func SanitizePaymentPayloadJSON(payloadJSON string) string {
@@ -134,14 +143,66 @@ func SanitizePaymentPayloadJSON(payloadJSON string) string {
 		return payloadJSON
 	}
 	if resp.ID == "" && resp.MerchantID == "" && resp.IdempotencyKey == "" {
-		return payloadJSON
+		return sanitizeGenericPaymentJSON(payloadJSON)
 	}
 
 	b, err := json.Marshal(resp.Sanitized())
 	if err != nil {
+		return sanitizeGenericPaymentJSON(payloadJSON)
+	}
+	return string(b)
+}
+
+func sanitizeGenericPaymentJSON(payloadJSON string) string {
+	var value any
+	if err := json.Unmarshal([]byte(payloadJSON), &value); err != nil {
+		return payloadJSON
+	}
+	if !removeSensitiveAuthenticationData(value) {
+		return payloadJSON
+	}
+	b, err := json.Marshal(value)
+	if err != nil {
 		return payloadJSON
 	}
 	return string(b)
+}
+
+func removeSensitiveAuthenticationData(value any) bool {
+	switch v := value.(type) {
+	case map[string]any:
+		changed := false
+		for key, nested := range v {
+			if isSensitiveAuthenticationKey(key) {
+				delete(v, key)
+				changed = true
+				continue
+			}
+			if removeSensitiveAuthenticationData(nested) {
+				changed = true
+			}
+		}
+		return changed
+	case []any:
+		changed := false
+		for _, nested := range v {
+			if removeSensitiveAuthenticationData(nested) {
+				changed = true
+			}
+		}
+		return changed
+	default:
+		return false
+	}
+}
+
+func isSensitiveAuthenticationKey(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "cvv_code", "cvv", "cvc", "cid":
+		return true
+	default:
+		return false
+	}
 }
 
 func MaskCardNumber(card string) string {

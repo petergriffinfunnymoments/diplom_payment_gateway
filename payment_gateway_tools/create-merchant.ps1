@@ -81,6 +81,98 @@ function Get-Sha256Hex {
     }
 }
 
+function Get-FirstNonEmpty {
+    param([string[]]$Values)
+    foreach ($value in $Values) {
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    }
+    return ""
+}
+
+function Get-VaultToken {
+    $tokenFile = $env:VAULT_TOKEN_FILE
+    if (-not [string]::IsNullOrWhiteSpace($tokenFile)) {
+        if (-not (Test-Path $tokenFile)) {
+            throw "VAULT_TOKEN_FILE указывает на несуществующий файл: $tokenFile"
+        }
+        $token = (Get-Content -Path $tokenFile -Raw).Trim()
+        if ([string]::IsNullOrWhiteSpace($token)) {
+            throw "VAULT_TOKEN_FILE пустой."
+        }
+        return $token
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:VAULT_TOKEN)) {
+        return $env:VAULT_TOKEN.Trim()
+    }
+
+    throw "Для Vault нужен VAULT_TOKEN или VAULT_TOKEN_FILE."
+}
+
+function Protect-MerchantSecret {
+    param([string]$SecretKey)
+
+    $provider = (Get-FirstNonEmpty @($env:SECRET_PROTECTOR, $env:SECRET_PROTECTOR_PROVIDER)).Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($provider) -or @("none", "noop", "plain", "plaintext") -contains $provider) {
+        return $SecretKey
+    }
+
+    if (@("vault", "vault_transit", "vault-transit", "hashicorp_vault", "hashicorp-vault") -notcontains $provider) {
+        throw "Неподдерживаемое значение SECRET_PROTECTOR: $provider"
+    }
+
+    $vaultAddr = $env:VAULT_ADDR
+    if ([string]::IsNullOrWhiteSpace($vaultAddr)) {
+        $vaultAddr = "http://127.0.0.1:8200"
+    }
+    $vaultAddr = $vaultAddr.TrimEnd("/")
+
+    $mount = $env:VAULT_TRANSIT_MOUNT
+    if ([string]::IsNullOrWhiteSpace($mount)) {
+        $mount = "transit"
+    }
+    $mount = $mount.Trim("/")
+
+    $keyName = $env:VAULT_TRANSIT_KEY
+    if ([string]::IsNullOrWhiteSpace($keyName)) {
+        $keyName = "payment-gateway-merchant-secrets"
+    }
+
+    $plaintext = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($SecretKey))
+    $body = @{
+        plaintext = $plaintext
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:VAULT_TRANSIT_CONTEXT)) {
+        $body["context"] = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($env:VAULT_TRANSIT_CONTEXT))
+    }
+
+    $bodyJson = $body | ConvertTo-Json -Compress
+    $keySegment = [System.Uri]::EscapeDataString($keyName.Trim("/"))
+    $url = "{0}/v1/{1}/encrypt/{2}" -f $vaultAddr, $mount, $keySegment
+    $headers = @{
+        "X-Vault-Token" = "$(Get-VaultToken)"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:VAULT_NAMESPACE)) {
+        $headers["X-Vault-Namespace"] = $env:VAULT_NAMESPACE
+    }
+
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri $url -Headers $headers -ContentType "application/json" -Body $bodyJson
+    }
+    catch {
+        throw "Vault Transit encrypt failed: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $response.data -or [string]::IsNullOrWhiteSpace($response.data.ciphertext)) {
+        throw "Vault Transit вернул пустой ciphertext."
+    }
+
+    return $response.data.ciphertext
+}
+
 if (-not $DatabaseURL) {
     throw "DATABASE_URL не задан. Передай -DatabaseURL или задай `$env:DATABASE_URL."
 }
@@ -137,9 +229,10 @@ WHERE merchant_id = '$merchantIDSql';
 $apiKey = "pg_pk_test_" + (New-SecretHex 24)
 $secretKey = "pg_sk_test_" + (New-SecretHex 32)
 $apiKeyHash = Get-Sha256Hex $apiKey
+$storedSecretKey = Protect-MerchantSecret $secretKey
 
 $apiKeyHashSql = Sql-Escape $apiKeyHash
-$secretKeySql = Sql-Escape $secretKey
+$secretKeySql = Sql-Escape $storedSecretKey
 
 if ($exists -gt 0 -and $RotateKeys) {
     $sql = @"
@@ -190,3 +283,8 @@ Write-Host "webhook_url: $WebhookURL"
 Write-Host ""
 Write-Host "ВАЖНО: secret_key показывается только сейчас. Сохрани его и передай магазину по защищенному каналу." -ForegroundColor Yellow
 Write-Host "В базе хранится hash от api_key, поэтому сам api_key тоже лучше сохранить сразу." -ForegroundColor Yellow
+if ($storedSecretKey -like "vault:v*") {
+    Write-Host "secret_key сохранён в базе в зашифрованном виде через HashiCorp Vault Transit." -ForegroundColor Green
+} else {
+    Write-Host "secret_key сохранён в базе открытым текстом. Для PCI DSS-подобного режима задай SECRET_PROTECTOR=vault_transit." -ForegroundColor Yellow
+}

@@ -62,19 +62,19 @@ func NewDummyValidator() contracts.PaymentValidator {
 
 func (v *PaymentDataValidator) Validate(ctx context.Context, req dto.CreatePaymentRequest) (dto.CreatePaymentRequest, error) {
 	if err := ctx.Err(); err != nil {
-		return req, err
+		return req.WithoutSensitiveAuthenticationData(), err
 	}
 
 	normalized := normalizeRequest(req)
 	if err := v.validate.Struct(toValidationModel(normalized)); err != nil {
-		return normalized, formatValidationError(err)
+		return normalized.WithoutSensitiveAuthenticationData(), formatValidationError(err)
 	}
 
 	if err := validatePaymentMethodSpecificFields(normalized); err != nil {
-		return normalized, err
+		return normalized.WithoutSensitiveAuthenticationData(), err
 	}
 
-	return normalized, nil
+	return normalized.WithoutSensitiveAuthenticationData(), nil
 }
 
 type createPaymentValidationModel struct {

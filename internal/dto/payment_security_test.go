@@ -73,3 +73,39 @@ func TestSanitizePaymentPayloadJSON(t *testing.T) {
 		t.Fatalf("sanitized json does not contain card mask: %s", sanitized)
 	}
 }
+
+func TestSanitizePaymentPayloadJSONRemovesCVVFromGenericPayload(t *testing.T) {
+	raw := `{"payment_info":{"customer_data":{"card_number":"4111111111111111","CVV_code":"123","nested":{"cvc":"999"}}}}`
+
+	sanitized := SanitizePaymentPayloadJSON(raw)
+	for _, forbidden := range []string{"CVV_code", `"cvc"`, "123", "999"} {
+		if strings.Contains(sanitized, forbidden) {
+			t.Fatalf("sanitized json contains forbidden value %q: %s", forbidden, sanitized)
+		}
+	}
+	if !strings.Contains(sanitized, "4111111111111111") {
+		t.Fatalf("generic sanitizer should not alter unrelated fields: %s", sanitized)
+	}
+}
+
+func TestCreatePaymentRequestWithoutSensitiveAuthenticationDataRemovesCVV(t *testing.T) {
+	req := CreatePaymentRequest{
+		PaymentInfo: PaymentInfo{
+			CustomerData: CustomerData{
+				CardNumber: "4111111111111111",
+				CvvCode:    "123",
+			},
+		},
+	}
+
+	safe := req.WithoutSensitiveAuthenticationData()
+	if safe.PaymentInfo.CustomerData.CvvCode != "" {
+		t.Fatalf("expected CVV to be removed")
+	}
+	if safe.PaymentInfo.CustomerData.CardNumber != req.PaymentInfo.CustomerData.CardNumber {
+		t.Fatalf("expected PAN to remain available for routing/tokenization")
+	}
+	if req.PaymentInfo.CustomerData.CvvCode == "" {
+		t.Fatalf("expected original request value copy to remain unchanged")
+	}
+}

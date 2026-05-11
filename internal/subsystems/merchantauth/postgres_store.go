@@ -3,14 +3,18 @@ package merchantauth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"payment-gateway/internal/subsystems/secrets"
 )
 
 type PostgresMerchantStore struct {
-	pool *pgxpool.Pool
+	pool      *pgxpool.Pool
+	protector secrets.Protector
 }
 
 func NewPostgresMerchantStore(ctx context.Context, dsn string) (*PostgresMerchantStore, error) {
@@ -23,7 +27,13 @@ func NewPostgresMerchantStore(ctx context.Context, dsn string) (*PostgresMerchan
 		return nil, err
 	}
 
-	store := &PostgresMerchantStore{pool: pool}
+	protector, err := secrets.NewProtectorFromEnv()
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+
+	store := &PostgresMerchantStore{pool: pool, protector: protector}
 	if err := store.ensureSchema(ctx); err != nil {
 		pool.Close()
 		return nil, err
@@ -62,8 +72,12 @@ func (s *PostgresMerchantStore) seedDefaultMerchant(ctx context.Context) error {
 	merchantName := getenv("MERCHANT_NAME", "Демонстрационный интернет-магазин")
 	apiKey := getenv("MERCHANT_API_KEY", "demo_api_key")
 	secretKey := getenv("MERCHANT_SECRET_KEY", "demo_secret_key")
+	storedSecretKey, err := s.protector.Protect(ctx, secretKey)
+	if err != nil {
+		return fmt.Errorf("merchant secret protection failed: %w", err)
+	}
 
-	_, err := s.pool.Exec(ctx, `
+	_, err = s.pool.Exec(ctx, `
 INSERT INTO merchants (merchant_id, name, api_key_hash, secret_key, active)
 VALUES ($1, $2, $3, $4, TRUE)
 ON CONFLICT (merchant_id) DO UPDATE
@@ -73,12 +87,13 @@ SET
     secret_key = EXCLUDED.secret_key,
     active = TRUE,
     updated_at = NOW()
-`, merchantID, merchantName, sha256Hex(apiKey), secretKey)
+`, merchantID, merchantName, sha256Hex(apiKey), storedSecretKey)
 	return err
 }
 
 func (s *PostgresMerchantStore) GetByID(ctx context.Context, merchantID string) (Merchant, bool, error) {
 	var merchant Merchant
+	var storedSecretKey string
 	err := s.pool.QueryRow(ctx, `
 SELECT merchant_id, name, api_key_hash, secret_key, active
 FROM merchants
@@ -88,7 +103,7 @@ LIMIT 1
 		&merchant.MerchantID,
 		&merchant.Name,
 		&merchant.APIKeyHash,
-		&merchant.SecretKey,
+		&storedSecretKey,
 		&merchant.Active,
 	)
 	if err != nil {
@@ -97,6 +112,11 @@ LIMIT 1
 		}
 		return Merchant{}, false, err
 	}
+	secretKey, err := s.protector.Reveal(ctx, storedSecretKey)
+	if err != nil {
+		return Merchant{}, false, fmt.Errorf("merchant secret reveal failed: %w", err)
+	}
+	merchant.SecretKey = secretKey
 	return merchant, true, nil
 }
 

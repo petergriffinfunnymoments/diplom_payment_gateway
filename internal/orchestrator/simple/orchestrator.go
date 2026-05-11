@@ -138,27 +138,28 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	if req.MerchantID == "" || req.IdempotencyKey == "" || req.PaymentID == "" {
 		return dto.PaymentResponse{}, errors.New("merchant_id, idempotency_key и payment_id обязательны")
 	}
+	safeReq := req.WithoutSensitiveAuthenticationData()
 
 	// 1) Idempotency: если этот idempotency_key уже был обработан — отдаём сохранённый response.
 	if status, payloadJSON, found, err := o.store.GetByIdempotencyKey(ctx, req.MerchantID, req.IdempotencyKey); err != nil {
 		return dto.PaymentResponse{}, err
 	} else if found {
-		_ = o.logEvent(ctx, req, contracts.EventPaymentResponseSent, contracts.LogLevelInfo, "orchestrator", status, "Cached payment response returned by idempotency key", map[string]string{
+		_ = o.logEvent(ctx, safeReq, contracts.EventPaymentResponseSent, contracts.LogLevelInfo, "orchestrator", status, "Cached payment response returned by idempotency key", map[string]string{
 			"idempotency_hit": "true",
 		})
 
 		if payloadJSON == "" {
 			return dto.PaymentResponse{
-				ID:             req.PaymentID,
-				MerchantID:     req.MerchantID,
-				IdempotencyKey: req.IdempotencyKey,
+				ID:             safeReq.PaymentID,
+				MerchantID:     safeReq.MerchantID,
+				IdempotencyKey: safeReq.IdempotencyKey,
 				CurrentStatus:  status,
 				PaymentInfo: dto.PaymentInfoResponse{
-					Amount:            req.PaymentInfo.Amount,
-					PaymentMethodData: req.PaymentInfo.PaymentMethodData,
-					CustomerData:      req.PaymentInfo.CustomerData.Sanitized(),
-					Description:       req.PaymentInfo.Description,
-					CreatedAt:         req.PaymentInfo.CreatedAt,
+					Amount:            safeReq.PaymentInfo.Amount,
+					PaymentMethodData: safeReq.PaymentInfo.PaymentMethodData,
+					CustomerData:      safeReq.PaymentInfo.CustomerData.Sanitized(),
+					Description:       safeReq.PaymentInfo.Description,
+					CreatedAt:         safeReq.PaymentInfo.CreatedAt,
 					UpdatedAt:         nowUTC(),
 				},
 				TransactionDetails: dto.TransactionDetails{RetryCount: 0},
@@ -174,36 +175,37 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	}
 
 	// 2) Workflow containers: start session / set status.
-	sessionID, err := o.workflow.StartSession(ctx, req)
+	sessionID, err := o.workflow.StartSession(ctx, safeReq)
 	if err != nil {
 		return dto.PaymentResponse{}, err
 	}
 
-	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusCreated)
-	_ = o.logEvent(ctx, req, contracts.EventPaymentReceived, contracts.LogLevelInfo, "orchestrator", statusCreated, "Payment request received by orchestrator", map[string]string{
+	_ = o.stateManager.SetStatus(ctx, safeReq.MerchantID, safeReq.PaymentID, statusCreated)
+	_ = o.logEvent(ctx, safeReq, contracts.EventPaymentReceived, contracts.LogLevelInfo, "orchestrator", statusCreated, "Payment request received by orchestrator", map[string]string{
 		"session_id":      sessionID,
-		"amount":          strconv.FormatFloat(req.PaymentInfo.Amount.Value, 'f', 2, 64),
-		"currency":        string(req.PaymentInfo.Amount.Currency),
-		"payment_method":  string(req.PaymentInfo.PaymentMethodData.Type),
-		"phone_mask":      paymentlogging.MaskPhone(req.PaymentInfo.CustomerData.Phone),
-		"email_mask":      paymentlogging.MaskEmail(req.PaymentInfo.CustomerData.Email),
-		"card_mask":       paymentlogging.MaskCardNumber(req.PaymentInfo.CustomerData.CardNumber),
-		"has_wallet_id":   strconv.FormatBool(req.PaymentInfo.CustomerData.DigitalWalletID != ""),
-		"description_len": strconv.Itoa(len(req.PaymentInfo.Description)),
+		"amount":          strconv.FormatFloat(safeReq.PaymentInfo.Amount.Value, 'f', 2, 64),
+		"currency":        string(safeReq.PaymentInfo.Amount.Currency),
+		"payment_method":  string(safeReq.PaymentInfo.PaymentMethodData.Type),
+		"phone_mask":      paymentlogging.MaskPhone(safeReq.PaymentInfo.CustomerData.Phone),
+		"email_mask":      paymentlogging.MaskEmail(safeReq.PaymentInfo.CustomerData.Email),
+		"card_mask":       paymentlogging.MaskCardNumber(safeReq.PaymentInfo.CustomerData.CardNumber),
+		"has_wallet_id":   strconv.FormatBool(safeReq.PaymentInfo.CustomerData.DigitalWalletID != ""),
+		"description_len": strconv.Itoa(len(safeReq.PaymentInfo.Description)),
 	})
 
 	// 3) Validator.
 	validatedReq, err := o.validator.Validate(ctx, req)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "VALIDATION_ERROR", err.Error(), "validator")
+		return o.failAndSave(ctx, safeReq, statusFailed, "VALIDATION_ERROR", err.Error(), "validator")
 	}
-	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, statusPending)
+	validatedReq = validatedReq.WithoutSensitiveAuthenticationData()
+	_ = o.stateManager.SetStatus(ctx, validatedReq.MerchantID, validatedReq.PaymentID, statusPending)
 	_ = o.logEvent(ctx, validatedReq, contracts.EventPaymentValidated, contracts.LogLevelInfo, "validator", statusPending, "Payment request validated", nil)
 
 	// 4) AntiFraud.
 	fraudResult, err := o.antiFraud.Check(ctx, validatedReq)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "ANTIFRAUD_ERROR", err.Error(), "antifraud")
+		return o.failAndSave(ctx, validatedReq, statusFailed, "ANTIFRAUD_ERROR", err.Error(), "antifraud")
 	}
 	_ = o.logEvent(ctx, validatedReq, contracts.EventFraudChecked, contracts.LogLevelInfo, "antifraud", statusPending, "Antifraud check completed", map[string]string{
 		"fraud_result": fraudResult.Result,
@@ -214,19 +216,19 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		if msg == "" {
 			msg = "payment blocked by antifraud"
 		}
-		return o.failAndSave(ctx, req, statusDeclined, "ANTIFRAUD_DECLINED", msg, "antifraud")
+		return o.failAndSave(ctx, validatedReq, statusDeclined, "ANTIFRAUD_DECLINED", msg, "antifraud")
 	}
 
 	// 5) Router.
 	paymentSystem, adapterKey, err := o.router.Route(ctx, validatedReq, fraudResult)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "ROUTING_ERROR", err.Error(), "orchestrator")
+		return o.failAndSave(ctx, validatedReq, statusFailed, "ROUTING_ERROR", err.Error(), "orchestrator")
 	}
 
 	// 6) Tokenization.
 	tok, err := o.tokenizer.Tokenize(ctx, validatedReq)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "TOKENIZATION_ERROR", err.Error(), "tokenizer")
+		return o.failAndSave(ctx, validatedReq, statusFailed, "TOKENIZATION_ERROR", err.Error(), "tokenizer")
 	}
 	_ = o.logEvent(ctx, validatedReq, contracts.EventTokenized, contracts.LogLevelInfo, "tokenizer", statusPending, "Payment data tokenized", map[string]string{
 		"token_preview": paymentlogging.TokenPreview(tok),
@@ -235,7 +237,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	// 7) Adapter + retry.
 	paymentAdapter, selectedProvider, err := o.adapterFactory.Resolve(adapterKey, paymentSystem)
 	if err != nil {
-		return o.failAndSave(ctx, req, statusFailed, "ADAPTER_FACTORY_ERROR", err.Error(), "adapter")
+		return o.failAndSave(ctx, validatedReq, statusFailed, "ADAPTER_FACTORY_ERROR", err.Error(), "adapter")
 	}
 	var lastAdapterResult contracts.AdapterResult
 	retryCount := 0
@@ -282,7 +284,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	// 8) Callback handler: build gateway response.
 	resp, err := o.callback.HandleCallback(ctx, lastAdapterResult, validatedReq, tok)
 	if err != nil {
-		resp = buildErrorResponse(req, statusFailed, "CALLBACK_ERROR", err.Error())
+		resp = buildErrorResponse(validatedReq, statusFailed, "CALLBACK_ERROR", err.Error())
 	}
 	resp = resp.Sanitized()
 	resp.TransactionDetails.RetryCount = retryCount
@@ -302,12 +304,13 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	}
 
 	// 10) Save for idempotency.
-	_ = o.store.Save(ctx, req.MerchantID, req.PaymentID, req.IdempotencyKey, resp.CurrentStatus, mustMarshalPaymentResponse(resp), nowUTC())
+	_ = o.store.Save(ctx, validatedReq.MerchantID, validatedReq.PaymentID, validatedReq.IdempotencyKey, resp.CurrentStatus, mustMarshalPaymentResponse(resp), nowUTC())
 
 	return resp, nil
 }
 
 func (o *SimpleOrchestrator) failAndSave(ctx context.Context, req dto.CreatePaymentRequest, status string, code string, msg string, service string) (dto.PaymentResponse, error) {
+	req = req.WithoutSensitiveAuthenticationData()
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, status)
 
 	resp := buildErrorResponse(req, status, code, msg)

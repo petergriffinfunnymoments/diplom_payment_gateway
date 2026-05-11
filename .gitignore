@@ -5,6 +5,7 @@
 *.local.ps1
 payment_gateway_tools/run.local.ps1
 payment_gateway_tools/secrets.ps1
+payment_gateway_tools/*.local.txt
 
 # OS / editor
 .DS_Store
