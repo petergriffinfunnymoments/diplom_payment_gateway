@@ -44,6 +44,7 @@ GET {{base_url}}/health
 - `POST /refunds/partial/create`
 - `GET /refunds/status`
 - `GET /refunds/search`
+- `GET /reports/transactions - Merchant statistics`
 - `POST /merchant/webhook - demo`
 
 Коллекция автоматически авторизует мерчанта: функция `authorizeMerchantRequest()` в pre-request script считает HMAC-подпись и добавляет заголовки:
@@ -59,6 +60,29 @@ GET {{base_url}}/health
 
 После `POST /payments` коллекция сохраняет `payment_id`.
 После `POST /refunds/...` коллекция сохраняет `refund_id`.
+
+## Отчеты и статистика
+
+Запрос `Reports / GET /reports/transactions - Merchant statistics` формирует отчет только по текущему `merchant_id`.
+
+Доступные фильтры задаются переменными environment:
+
+- `report_date_from` — начало периода, формат `YYYY-MM-DD` или RFC3339;
+- `report_date_to` — конец периода, формат `YYYY-MM-DD` или RFC3339;
+- `report_status` — например `CAPTURED`, `PENDING`, `DECLINED`, `FAILED`;
+- `report_payment_system` — например `YOOKASSA`, `STRIPE`, `DIGITAL_RUBLE`, `DUMMY`;
+- `report_payment_method` — например `Банковская карта` или `Цифровой рубль`;
+- `report_limit` — сколько последних транзакций вернуть, максимум `500`.
+
+Если фильтр оставить пустым, он не применяется. Во вкладке `Visualize` Postman показывает:
+
+- карточки KPI: количество платежей, общая сумма, успешная сумма, средний чек;
+- donut-диаграмму долей по статусам;
+- гистограмму активности по дням;
+- воронку статусов платежей;
+- горизонтальные бары по сумме платежных систем;
+- распределение по статусам, платежным системам и способам оплаты;
+- таблицу последних транзакций.
 
 ## Визуализация ответов
 
@@ -88,6 +112,7 @@ GET {{base_url}}/health
 5. Дождись webhook от провайдера или проверь статус через `GET /payments/{payment_id}`.
 6. Когда платеж стал `CAPTURED`, выполни `POST /refunds/full/create` или `POST /refunds/partial/create`.
 7. Проверь возврат через `GET /refunds/status` или `GET /refunds/search`.
+8. Выполни `Reports / GET /reports/transactions - Merchant statistics`, чтобы увидеть статистику по текущему мерчанту.
 
 Для локальной проверки без реального провайдера используй маршрут на provider `simulated` или совместимый `dummy`.
 

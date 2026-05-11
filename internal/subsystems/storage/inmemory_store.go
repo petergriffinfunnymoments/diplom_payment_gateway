@@ -21,9 +21,11 @@ type InMemoryTransactionStore struct {
 }
 
 type storedTx struct {
-	status      string
-	payloadJSON string
-	updatedAt   time.Time
+	status         string
+	payloadJSON    string
+	idempotencyKey string
+	createdAt      time.Time
+	updatedAt      time.Time
 }
 
 type storedRefund struct {
@@ -66,9 +68,14 @@ func (s *InMemoryTransactionStore) Save(
 	defer s.mu.Unlock()
 
 	tx := storedTx{
-		status:      status,
-		payloadJSON: payloadJSON,
-		updatedAt:   updatedAt,
+		status:         status,
+		payloadJSON:    payloadJSON,
+		idempotencyKey: idempotencyKey,
+		createdAt:      updatedAt,
+		updatedAt:      updatedAt,
+	}
+	if existing, ok := s.byIdempotency[key]; ok && !existing.createdAt.IsZero() {
+		tx.createdAt = existing.createdAt
 	}
 
 	s.byIdempotency[key] = tx

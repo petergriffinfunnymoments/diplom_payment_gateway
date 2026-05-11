@@ -16,6 +16,7 @@ import (
 	"payment-gateway/internal/contracts"
 	payments "payment-gateway/internal/httpapi/payments"
 	refunds "payment-gateway/internal/httpapi/refunds"
+	reports "payment-gateway/internal/httpapi/reports"
 	webhooks "payment-gateway/internal/httpapi/webhooks"
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
 	"payment-gateway/internal/subsystems/adapter"
@@ -75,9 +76,13 @@ func main() {
 	var notificationService contracts.Notifications = paymentnotifications.NewNoOpNotifications()
 	var routeStore contracts.PaymentRouteStore
 	var refundStore contracts.RefundStore
+	var reportStore contracts.TransactionReportStore
 	authenticator := merchantauth.NewAuthenticator(merchantauth.NewStaticMerchantStoreFromEnv())
 	if rs, ok := store.(contracts.RefundStore); ok {
 		refundStore = rs
+	}
+	if rs, ok := store.(contracts.TransactionReportStore); ok {
+		reportStore = rs
 	}
 
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
@@ -89,6 +94,9 @@ func main() {
 		store = pgStore
 		if rs, ok := pgStore.(contracts.RefundStore); ok {
 			refundStore = rs
+		}
+		if rs, ok := pgStore.(contracts.TransactionReportStore); ok {
+			reportStore = rs
 		}
 		logger.Log("level", "info", "msg", "postgres transaction store connected")
 
@@ -149,6 +157,7 @@ func main() {
 	mux.Handle("/payments/", authenticator.Middleware(payments.NewGetPaymentStatusHandler(store)))
 	refundHandler := refunds.NewRefundHandler(store, refundStore, adapter.NewFactoryFromEnv(), eventLogger)
 	mux.Handle("/refunds/", authenticator.Middleware(refundHandler))
+	mux.Handle("/reports/transactions", authenticator.Middleware(reports.NewTransactionReportHandler(reportStore)))
 	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))
 	mux.Handle("/webhooks/stripe", webhooks.NewStripeWebhookHandler(store, eventLogger, notificationService))
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))

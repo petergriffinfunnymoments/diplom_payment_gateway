@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
 CREATE INDEX IF NOT EXISTS idx_payment_transactions_merchant_payment
   ON payment_transactions (merchant_id, payment_id);
 
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_merchant_created
+  ON payment_transactions (merchant_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS payment_refunds (
   id BIGSERIAL PRIMARY KEY,
   merchant_id TEXT NOT NULL,

@@ -143,6 +143,10 @@ type TransactionStore interface {
 	GetByPaymentID(ctx context.Context, merchantID string, paymentID string) (status string, payloadJSON string, found bool, err error)
 }
 
+type TransactionReportStore interface {
+	BuildTransactionReport(ctx context.Context, filter dto.TransactionReportFilter) (dto.TransactionReport, error)
+}
+
 type RefundStore interface {
 	SaveRefund(ctx context.Context, refund dto.Refund) error
 	GetRefundByID(ctx context.Context, merchantID string, refundID string) (refund dto.Refund, found bool, err error)
