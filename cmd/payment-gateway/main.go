@@ -17,6 +17,7 @@ import (
 	payments "payment-gateway/internal/httpapi/payments"
 	refunds "payment-gateway/internal/httpapi/refunds"
 	reports "payment-gateway/internal/httpapi/reports"
+	paymentsecurity "payment-gateway/internal/httpapi/security"
 	webhooks "payment-gateway/internal/httpapi/webhooks"
 	orchestratorSimple "payment-gateway/internal/orchestrator/simple"
 	"payment-gateway/internal/subsystems/adapter"
@@ -42,6 +43,28 @@ func main() {
 	}
 
 	logger := kitlog.NewLogfmtLogger(os.Stdout)
+	appEnv := os.Getenv("APP_ENV")
+	if appEnv == "" {
+		appEnv = "dev"
+	}
+	transportSecurity := paymentsecurity.TransportConfigFromEnv()
+	tlsCertFile := strings.TrimSpace(os.Getenv("TLS_CERT_FILE"))
+	tlsKeyFile := strings.TrimSpace(os.Getenv("TLS_KEY_FILE"))
+	if err := paymentsecurity.ValidateTLSConfig(tlsCertFile, tlsKeyFile); err != nil {
+		logger.Log("level", "error", "msg", err.Error())
+		os.Exit(1)
+	}
+	if transportSecurity.RequireHTTPS && tlsCertFile == "" && !transportSecurity.TrustProxyHeaders {
+		logger.Log("level", "error", "msg", "HTTPS enforcement requires TLS_CERT_FILE/TLS_KEY_FILE or TRUST_PROXY_HEADERS=true")
+		os.Exit(1)
+	}
+	if err := paymentsecurity.ValidateOutboundURLs(transportSecurity.RequireHTTPS, map[string]string{
+		"PAYMENT_RETURN_URL":   os.Getenv("PAYMENT_RETURN_URL"),
+		"MERCHANT_WEBHOOK_URL": os.Getenv("MERCHANT_WEBHOOK_URL"),
+	}); err != nil {
+		logger.Log("level", "error", "msg", "insecure outbound URL configuration", "err", err.Error())
+		os.Exit(1)
+	}
 
 	healthEndpoint := endpoint.Endpoint(func(ctx context.Context, request interface{}) (interface{}, error) {
 		_ = ctx
@@ -100,12 +123,7 @@ func main() {
 		}
 		logger.Log("level", "info", "msg", "postgres transaction store connected")
 
-		env := os.Getenv("APP_ENV")
-		if env == "" {
-			env = "dev"
-		}
-
-		pgEventLogger, err := paymentlogging.NewPostgresEventLogger(context.Background(), dsn, env)
+		pgEventLogger, err := paymentlogging.NewPostgresEventLogger(context.Background(), dsn, appEnv)
 		if err != nil {
 			logger.Log("level", "error", "msg", "failed to connect postgres event logger", "err", err.Error())
 			os.Exit(1)
@@ -165,9 +183,10 @@ func main() {
 	// Статика (web/index.html и web/static/*)
 	mux.Handle("/", http.FileServer(http.Dir("web")))
 
+	secured := paymentsecurity.Middleware(transportSecurity, mux)
 	logged := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		mux.ServeHTTP(w, r)
+		secured.ServeHTTP(w, r)
 		logger.Log(
 			"method", r.Method,
 			"path", r.URL.Path,
@@ -181,8 +200,22 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	logger.Log("level", "info", "msg", "payment-gateway starting", "addr", addr)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	logger.Log(
+		"level", "info",
+		"msg", "payment-gateway starting",
+		"addr", addr,
+		"app_env", appEnv,
+		"require_https", transportSecurity.RequireHTTPS,
+		"trust_proxy_headers", transportSecurity.TrustProxyHeaders,
+		"tls_enabled", tlsCertFile != "",
+	)
+	var err error
+	if tlsCertFile != "" {
+		err = srv.ListenAndServeTLS(tlsCertFile, tlsKeyFile)
+	} else {
+		err = srv.ListenAndServe()
+	}
+	if err != nil && err != http.ErrServerClosed {
 		logger.Log("level", "error", "msg", "server stopped", "err", err.Error())
 	}
 }

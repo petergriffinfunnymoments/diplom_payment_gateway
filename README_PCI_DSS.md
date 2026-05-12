@@ -14,13 +14,15 @@
 - `merchants.secret_key` может храниться в PostgreSQL в зашифрованном виде через HashiCorp Vault Transit (`SECRET_PROTECTOR=vault_transit`).
 - Добавлена ролевая модель `merchant/admin/auditor`: обычный мерчант получает доступ только к своим платежам, возвратам и отчётам; `admin` может работать с данными любого мерчанта; `auditor` имеет read-only доступ к статусам, возвратам и отчётам.
 - Неизвестные роли отклоняются при аутентификации, а отказы доступа логируются событием `authorization_failed`.
+- Добавлены транспортные меры для PCI DSS Requirement 4: опциональный запуск через `ListenAndServeTLS`, режим `REQUIRE_HTTPS`, поддержка `X-Forwarded-Proto` при `TRUST_PROXY_HEADERS=true`, security headers и запрет `http://` в `PAYMENT_RETURN_URL`/`MERCHANT_WEBHOOK_URL` при включённом HTTPS enforcement.
 
 Ограничения:
 
 - Backend всё ещё принимает `card_number` и `CVV_code` во входном JSON для учебного сценария, поэтому card-data path остаётся в PCI scope. CVV используется только для валидации и затем очищается из внутренних DTO.
 - Для реального сокращения scope нужно переходить на hosted checkout/hosted fields/iframe внешнего PCI DSS-compliant провайдера или выносить token vault в отдельный CDE-сегмент.
 - Старые записи в `payment_transactions.payload_json`, созданные до этой правки, нужно очистить отдельной миграцией, если в них уже есть PAN/CVV.
-- Vault защищает секреты мерчантов в БД, но не заменяет TLS, RBAC, аудит доступа, SIEM, vulnerability scans и организационные PCI DSS-контроли.
+- LocalTunnel подходит для демонстрации webhook-ов, но production-контур должен использовать контролируемый TLS/reverse proxy. Если TLS завершается на proxy, включай `REQUIRE_HTTPS=true` и `TRUST_PROXY_HEADERS=true`.
+- Vault, TLS и RBAC не заменяют SIEM, vulnerability scans, pentest и организационные PCI DSS-контроли.
 
 Проверка:
 
