@@ -12,6 +12,7 @@ import (
 
 	"payment-gateway/internal/contracts"
 	"payment-gateway/internal/dto"
+	"payment-gateway/internal/subsystems/merchantauth"
 )
 
 type errorResponse struct {
@@ -25,11 +26,20 @@ func NewCreatePaymentHandler(
 	logger interface{}, // для диплома оставим сигнатуру; позже заменим на contracts.EventLogger/kit/log.Logger
 ) http.Handler {
 	_ = logger
+	eventLogger, _ := logger.(contracts.EventLogger)
 
 	createPaymentEndpoint := endpoint.Endpoint(func(ctx context.Context, request interface{}) (interface{}, error) {
 		req, ok := request.(dto.CreatePaymentRequest)
 		if !ok {
 			return errorResponse{Code: "BAD_REQUEST", Message: "invalid request payload"}, nil
+		}
+		authMerchant, ok := merchantauth.MerchantFromContext(ctx)
+		if !ok {
+			return errorResponse{Code: "AUTH_CONTEXT_MISSING", Message: "authenticated merchant context is required"}, nil
+		}
+		if !merchantauth.CanWriteMerchantData(authMerchant, req.MerchantID) {
+			merchantauth.LogAuthorizationFailed(ctx, eventLogger, authMerchant, req.MerchantID, "POST /payments", "payment creation is not allowed for this role or merchant")
+			return errorResponse{Code: "FORBIDDEN", Message: "payment creation is not allowed for this role or merchant"}, nil
 		}
 
 		// На старте оркестратор может быть заглушкой — вернём 501 на уровне транспорта.
@@ -50,6 +60,16 @@ func NewCreatePaymentHandler(
 
 	encodeCreatePaymentResponse := func(_ context.Context, w http.ResponseWriter, response interface{}) error {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if errResp, ok := response.(errorResponse); ok {
+			switch errResp.Code {
+			case "BAD_REQUEST":
+				w.WriteHeader(http.StatusBadRequest)
+			case "AUTH_CONTEXT_MISSING":
+				w.WriteHeader(http.StatusUnauthorized)
+			case "FORBIDDEN":
+				w.WriteHeader(http.StatusForbidden)
+			}
+		}
 		return json.NewEncoder(w).Encode(response)
 	}
 

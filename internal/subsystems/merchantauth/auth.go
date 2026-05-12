@@ -24,13 +24,24 @@ const (
 	HeaderSignature  = "X-Signature"
 )
 
+type MerchantRole string
+
+const (
+	RoleMerchant MerchantRole = "merchant"
+	RoleAdmin    MerchantRole = "admin"
+	RoleAuditor  MerchantRole = "auditor"
+)
+
 type Merchant struct {
 	MerchantID string
 	Name       string
 	APIKeyHash string
 	SecretKey  string
+	Role       MerchantRole
 	Active     bool
 }
+
+type authContextKey struct{}
 
 type MerchantProvider interface {
 	GetByID(ctx context.Context, merchantID string) (Merchant, bool, error)
@@ -55,18 +66,24 @@ type ErrorResponse struct {
 
 func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := a.Authenticate(r.Context(), r); err != nil {
+		merchant, err := a.AuthenticateMerchant(r.Context(), r)
+		if err != nil {
 			writeAuthError(w, err)
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(WithMerchant(r.Context(), merchant)))
 	})
 }
 
 func (a *Authenticator) Authenticate(ctx context.Context, r *http.Request) error {
+	_, err := a.AuthenticateMerchant(ctx, r)
+	return err
+}
+
+func (a *Authenticator) AuthenticateMerchant(ctx context.Context, r *http.Request) (Merchant, error) {
 	if a == nil || a.provider == nil {
-		return errors.New("merchant authentication is not configured")
+		return Merchant{}, errors.New("merchant authentication is not configured")
 	}
 
 	merchantID := strings.TrimSpace(r.Header.Get(HeaderMerchantID))
@@ -75,42 +92,76 @@ func (a *Authenticator) Authenticate(ctx context.Context, r *http.Request) error
 	signature := strings.TrimSpace(r.Header.Get(HeaderSignature))
 
 	if merchantID == "" || apiKey == "" || timestamp == "" || signature == "" {
-		return errors.New("missing merchant authentication headers")
+		return Merchant{}, errors.New("missing merchant authentication headers")
 	}
 
 	merchant, found, err := a.provider.GetByID(ctx, merchantID)
 	if err != nil {
-		return fmt.Errorf("merchant lookup failed: %w", err)
+		return Merchant{}, fmt.Errorf("merchant lookup failed: %w", err)
 	}
 	if !found || !merchant.Active {
-		return errors.New("merchant is not found or disabled")
+		return Merchant{}, errors.New("merchant is not found or disabled")
+	}
+	merchant.Role = NormalizeRole(merchant.Role)
+	if merchant.Role == "" {
+		return Merchant{}, errors.New("merchant role is not allowed")
 	}
 
 	if !constantTimeEqual(sha256Hex(apiKey), merchant.APIKeyHash) {
-		return errors.New("invalid api key")
+		return Merchant{}, errors.New("invalid api key")
 	}
 
 	if err := a.validateTimestamp(timestamp); err != nil {
-		return err
+		return Merchant{}, err
 	}
 
 	body, err := readAndRestoreBody(r)
 	if err != nil {
-		return fmt.Errorf("request body read failed: %w", err)
+		return Merchant{}, fmt.Errorf("request body read failed: %w", err)
 	}
 
 	if r.Method == http.MethodPost && r.URL.Path == "/payments" {
 		if err := checkBodyMerchantID(body, merchantID); err != nil {
-			return err
+			return Merchant{}, err
 		}
 	}
 
 	expected := BuildSignature(merchant.SecretKey, timestamp, r.Method, r.URL.RequestURI(), body)
 	if !constantTimeEqual(signature, expected) {
-		return errors.New("invalid request signature")
+		return Merchant{}, errors.New("invalid request signature")
 	}
 
-	return nil
+	return merchant, nil
+}
+
+func NormalizeRole(role MerchantRole) MerchantRole {
+	switch MerchantRole(strings.ToLower(strings.TrimSpace(string(role)))) {
+	case RoleMerchant:
+		return RoleMerchant
+	case RoleAdmin:
+		return RoleAdmin
+	case RoleAuditor:
+		return RoleAuditor
+	default:
+		return ""
+	}
+}
+
+func WithMerchant(ctx context.Context, merchant Merchant) context.Context {
+	merchant.Role = NormalizeRole(merchant.Role)
+	return context.WithValue(ctx, authContextKey{}, merchant)
+}
+
+func MerchantFromContext(ctx context.Context) (Merchant, bool) {
+	merchant, ok := ctx.Value(authContextKey{}).(Merchant)
+	if !ok {
+		return Merchant{}, false
+	}
+	merchant.Role = NormalizeRole(merchant.Role)
+	if merchant.Role == "" {
+		return Merchant{}, false
+	}
+	return merchant, true
 }
 
 func (a *Authenticator) validateTimestamp(timestamp string) error {

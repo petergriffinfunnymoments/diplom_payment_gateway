@@ -1094,7 +1094,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/reports/transactions?merchant_id={{merchant_id}}&date_from={{report_date_from}}&date_to={{report_date_to}}&status={{report_status}}&payment_system={{report_payment_system}}&payment_method={{report_payment_method}}&limit={{report_limit}}",
+              "raw": "{{base_url}}/reports/transactions?merchant_id={{report_merchant_id}}&date_from={{report_date_from}}&date_to={{report_date_to}}&status={{report_status}}&payment_system={{report_payment_system}}&payment_method={{report_payment_method}}&limit={{report_limit}}",
               "host": [
                 "{{base_url}}"
               ],
@@ -1105,7 +1105,7 @@
               "query": [
                 {
                   "key": "merchant_id",
-                  "value": "{{merchant_id}}"
+                  "value": "{{report_merchant_id}}"
                 },
                 {
                   "key": "date_from",

@@ -9,6 +9,10 @@ param(
     [string]$WebhookURL = "",
 
     [Parameter(Mandatory=$false)]
+    [ValidateSet("merchant", "admin", "auditor")]
+    [string]$Role = "merchant",
+
+    [Parameter(Mandatory=$false)]
     [string]$DatabaseURL = $env:DATABASE_URL,
 
     [Parameter(Mandatory=$false)]
@@ -182,6 +186,7 @@ $PSQL = Find-Psql $PsqlPath
 $merchantIDSql = Sql-Escape $MerchantID
 $nameSql = Sql-Escape $Name
 $webhookURLSql = Sql-Escape $WebhookURL
+$roleSql = Sql-Escape $Role
 
 # Схема создаётся/дополняется безопасно: это удобно, если таблица merchants уже была создана старой версией проекта.
 $schemaSql = @"
@@ -194,6 +199,7 @@ ALTER TABLE merchants ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE merchants ADD COLUMN IF NOT EXISTS api_key_hash TEXT;
 ALTER TABLE merchants ADD COLUMN IF NOT EXISTS secret_key TEXT;
 ALTER TABLE merchants ADD COLUMN IF NOT EXISTS webhook_url TEXT;
+ALTER TABLE merchants ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'merchant';
 ALTER TABLE merchants ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE merchants ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE merchants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
@@ -215,6 +221,7 @@ if ($exists -gt 0 -and -not $RotateKeys) {
 SELECT
     merchant_id,
     name,
+    role,
     left(api_key_hash, 12) || '...' AS api_key_hash_preview,
     webhook_url,
     active,
@@ -242,6 +249,7 @@ SET
     api_key_hash = '$apiKeyHashSql',
     secret_key = '$secretKeySql',
     webhook_url = '$webhookURLSql',
+    role = '$roleSql',
     active = TRUE,
     updated_at = NOW()
 WHERE merchant_id = '$merchantIDSql';
@@ -256,6 +264,7 @@ INSERT INTO merchants (
     api_key_hash,
     secret_key,
     webhook_url,
+    role,
     active,
     created_at,
     updated_at
@@ -265,6 +274,7 @@ INSERT INTO merchants (
     '$apiKeyHashSql',
     '$secretKeySql',
     '$webhookURLSql',
+    '$roleSql',
     TRUE,
     NOW(),
     NOW()
@@ -277,6 +287,7 @@ INSERT INTO merchants (
 Write-Host ""
 Write-Host "Данные для подключения интернет-магазина:" -ForegroundColor Cyan
 Write-Host "merchant_id: $MerchantID"
+Write-Host "role:        $Role"
 Write-Host "api_key:     $apiKey"
 Write-Host "secret_key:  $secretKey"
 Write-Host "webhook_url: $WebhookURL"

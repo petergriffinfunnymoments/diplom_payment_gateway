@@ -12,6 +12,8 @@
 - Webhook-обработчики YooKassa/Stripe санитизируют response перед сохранением и merchant notification.
 - Логгеры применяют redaction для PAN/CVV/похожих секретов перед записью в console/PostgreSQL.
 - `merchants.secret_key` может храниться в PostgreSQL в зашифрованном виде через HashiCorp Vault Transit (`SECRET_PROTECTOR=vault_transit`).
+- Добавлена ролевая модель `merchant/admin/auditor`: обычный мерчант получает доступ только к своим платежам, возвратам и отчётам; `admin` может работать с данными любого мерчанта; `auditor` имеет read-only доступ к статусам, возвратам и отчётам.
+- Неизвестные роли отклоняются при аутентификации, а отказы доступа логируются событием `authorization_failed`.
 
 Ограничения:
 

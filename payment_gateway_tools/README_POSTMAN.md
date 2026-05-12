@@ -63,10 +63,14 @@ GET {{base_url}}/health
 
 ## Отчеты и статистика
 
-Запрос `Reports / GET /reports/transactions - Merchant statistics` формирует отчет только по текущему `merchant_id`.
+Запрос `Reports / GET /reports/transactions - Merchant statistics` формирует отчет по `report_merchant_id`.
+Для обычной роли `merchant` значение `report_merchant_id` должно совпадать с `merchant_id`, иначе шлюз вернёт `403 MERCHANT_SCOPE_MISMATCH`.
+Для роли `admin` можно указать `report_merchant_id` любого мерчанта.
+Для роли `auditor` тоже можно указать `report_merchant_id` любого мерчанта, но эта роль предназначена только для read-only запросов.
 
 Доступные фильтры задаются переменными environment:
 
+- `report_merchant_id` — мерчант, по которому строится отчёт;
 - `report_date_from` — начало периода, формат `YYYY-MM-DD` или RFC3339;
 - `report_date_to` — конец периода, формат `YYYY-MM-DD` или RFC3339;
 - `report_status` — например `CAPTURED`, `PENDING`, `DECLINED`, `FAILED`;

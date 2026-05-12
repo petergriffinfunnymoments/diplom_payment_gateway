@@ -9,6 +9,7 @@ function pgmerchants {
 SELECT
     merchant_id,
     name,
+    role,
     left(api_key_hash, 12) || '...' AS api_key_hash_preview,
     webhook_url,
     active,
@@ -30,6 +31,7 @@ function pgmerchant {
 SELECT
     merchant_id,
     name,
+    role,
     left(api_key_hash, 12) || '...' AS api_key_hash_preview,
     webhook_url,
     active,
@@ -63,6 +65,24 @@ function pgmerchantenable {
     & $PSQL $env:DATABASE_URL -c "
 UPDATE merchants
 SET active = TRUE,
+    updated_at = NOW()
+WHERE merchant_id = '$MerchantID';
+"
+}
+
+function pgmerchantrole {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$MerchantID,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("merchant", "admin", "auditor")]
+        [string]$Role
+    )
+
+    & $PSQL $env:DATABASE_URL -c "
+UPDATE merchants
+SET role = '$Role',
     updated_at = NOW()
 WHERE merchant_id = '$MerchantID';
 "

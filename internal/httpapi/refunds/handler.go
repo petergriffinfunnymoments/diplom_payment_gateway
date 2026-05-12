@@ -15,6 +15,7 @@ import (
 	"payment-gateway/internal/contracts"
 	"payment-gateway/internal/dto"
 	"payment-gateway/internal/subsystems/adapter"
+	"payment-gateway/internal/subsystems/merchantauth"
 )
 
 type Handler struct {
@@ -77,6 +78,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, full bool) {
 
 	if err := validateCreateRefundRequest(req, full); err != nil {
 		writeRefundError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	authMerchant, ok := merchantauth.MerchantFromContext(r.Context())
+	if !ok {
+		writeRefundError(w, http.StatusUnauthorized, "AUTH_CONTEXT_MISSING", "authenticated merchant context is required")
+		return
+	}
+	if !merchantauth.CanWriteMerchantData(authMerchant, req.MerchantID) {
+		merchantauth.LogAuthorizationFailed(r.Context(), h.logger, authMerchant, req.MerchantID, r.Method+" "+r.URL.Path, "refund creation is not allowed for this role or merchant")
+		writeRefundError(w, http.StatusForbidden, "FORBIDDEN", "refund creation is not allowed for this role or merchant")
 		return
 	}
 
@@ -210,6 +221,16 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		writeRefundError(w, http.StatusBadRequest, "BAD_REQUEST", "merchant_id and id are required")
 		return
 	}
+	authMerchant, ok := merchantauth.MerchantFromContext(r.Context())
+	if !ok {
+		writeRefundError(w, http.StatusUnauthorized, "AUTH_CONTEXT_MISSING", "authenticated merchant context is required")
+		return
+	}
+	if !merchantauth.CanReadMerchantData(authMerchant, merchantID) {
+		merchantauth.LogAuthorizationFailed(r.Context(), h.logger, authMerchant, merchantID, "GET /refunds/status", "refund status access is not allowed for this role or merchant")
+		writeRefundError(w, http.StatusForbidden, "FORBIDDEN", "refund status access is not allowed for this role or merchant")
+		return
+	}
 
 	refund, found, err := h.refunds.GetRefundByID(r.Context(), merchantID, refundID)
 	if err != nil {
@@ -230,6 +251,22 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, dto.RefundSearchResponse{
 			Success: false,
 			Error:   &dto.GatewayError{Code: "BAD_REQUEST", Message: "merchant_id is required"},
+		})
+		return
+	}
+	authMerchant, ok := merchantauth.MerchantFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, dto.RefundSearchResponse{
+			Success: false,
+			Error:   &dto.GatewayError{Code: "AUTH_CONTEXT_MISSING", Message: "authenticated merchant context is required"},
+		})
+		return
+	}
+	if !merchantauth.CanReadMerchantData(authMerchant, merchantID) {
+		merchantauth.LogAuthorizationFailed(r.Context(), h.logger, authMerchant, merchantID, "GET /refunds/search", "refund search access is not allowed for this role or merchant")
+		writeJSON(w, http.StatusForbidden, dto.RefundSearchResponse{
+			Success: false,
+			Error:   &dto.GatewayError{Code: "FORBIDDEN", Message: "refund search access is not allowed for this role or merchant"},
 		})
 		return
 	}

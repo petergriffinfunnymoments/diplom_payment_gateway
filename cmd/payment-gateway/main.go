@@ -153,11 +153,11 @@ func main() {
 	}
 
 	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithRouting(store, eventLogger, tokenizerService, notificationService, routeStore)
-	mux.Handle("/payments", authenticator.Middleware(payments.NewCreatePaymentHandler(orchestrator, logger)))
-	mux.Handle("/payments/", authenticator.Middleware(payments.NewGetPaymentStatusHandler(store)))
+	mux.Handle("/payments", authenticator.Middleware(payments.NewCreatePaymentHandler(orchestrator, eventLogger)))
+	mux.Handle("/payments/", authenticator.Middleware(payments.NewGetPaymentStatusHandlerWithLogger(store, eventLogger)))
 	refundHandler := refunds.NewRefundHandler(store, refundStore, adapter.NewFactoryFromEnv(), eventLogger)
 	mux.Handle("/refunds/", authenticator.Middleware(refundHandler))
-	mux.Handle("/reports/transactions", authenticator.Middleware(reports.NewTransactionReportHandler(reportStore)))
+	mux.Handle("/reports/transactions", authenticator.Middleware(reports.NewTransactionReportHandlerWithLogger(reportStore, eventLogger)))
 	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))
 	mux.Handle("/webhooks/stripe", webhooks.NewStripeWebhookHandler(store, eventLogger, notificationService))
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))

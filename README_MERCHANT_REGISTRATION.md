@@ -17,9 +17,10 @@ payment_gateway_tools/merchant-admin-tools.ps1
 2. генерирует `api_key`;
 3. генерирует `secret_key`;
 4. считает SHA-256 hash от `api_key`;
-5. при включённом `SECRET_PROTECTOR=vault_transit` шифрует `secret_key` через HashiCorp Vault;
-6. записывает мерчанта в PostgreSQL;
-7. выводит данные, которые нужно передать интернет-магазину.
+5. задаёт роль `merchant` или `admin`;
+6. при включённом `SECRET_PROTECTOR=vault_transit` шифрует `secret_key` через HashiCorp Vault;
+7. записывает мерчанта в PostgreSQL;
+8. выводит данные, которые нужно передать интернет-магазину.
 
 ## Запуск
 
@@ -32,6 +33,24 @@ payment_gateway_tools/merchant-admin-tools.ps1
   -MerchantID "merchant_books" `
   -Name "Book Shop" `
   -WebhookURL "https://books-shop.example.com/payment-webhook"
+```
+
+Административную учётную запись можно создать той же командой:
+
+```powershell
+.\payment_gateway_tools\create-merchant.ps1 `
+  -MerchantID "admin_1" `
+  -Name "Gateway Admin" `
+  -Role admin
+```
+
+Read-only аудитора можно создать так:
+
+```powershell
+.\payment_gateway_tools\create-merchant.ps1 `
+  -MerchantID "auditor_1" `
+  -Name "Gateway Auditor" `
+  -Role auditor
 ```
 
 Если нужно перевыпустить ключи существующего мерчанта:
@@ -48,6 +67,7 @@ payment_gateway_tools/merchant-admin-tools.ps1
 
 ```text
 merchant_id
+role
 api_key
 secret_key
 webhook_url
@@ -76,6 +96,7 @@ pgmerchant merchant_books
 ```powershell
 pgmerchantdisable merchant_books
 pgmerchantenable merchant_books
+pgmerchantrole admin_1 admin
 ```
 
 ## Как подключается второй магазин
@@ -88,3 +109,5 @@ GET /payments/{payment_id}?merchant_id=...
 ```
 
 Но каждый запрос должен быть подписан своими ключами.
+
+Обычный мерчант имеет доступ только к своим данным. Роль `admin` предназначена для внутреннего оператора шлюза и может получать данные по любому `merchant_id`. Роль `auditor` является read-only: она может смотреть статусы, возвраты и отчёты по мерчантам, но не может создавать платежи и возвраты.

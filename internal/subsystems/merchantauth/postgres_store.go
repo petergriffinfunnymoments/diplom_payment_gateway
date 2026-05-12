@@ -56,10 +56,13 @@ CREATE TABLE IF NOT EXISTS merchants (
     name TEXT NOT NULL,
     api_key_hash TEXT NOT NULL,
     secret_key TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'merchant',
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE merchants ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'merchant';
 
 CREATE INDEX IF NOT EXISTS idx_merchants_active
     ON merchants (merchant_id, active);
@@ -72,22 +75,27 @@ func (s *PostgresMerchantStore) seedDefaultMerchant(ctx context.Context) error {
 	merchantName := getenv("MERCHANT_NAME", "Демонстрационный интернет-магазин")
 	apiKey := getenv("MERCHANT_API_KEY", "demo_api_key")
 	secretKey := getenv("MERCHANT_SECRET_KEY", "demo_secret_key")
+	role := NormalizeRole(MerchantRole(getenv("MERCHANT_ROLE", string(RoleMerchant))))
+	if role == "" {
+		return errors.New("MERCHANT_ROLE must be one of: merchant, admin, auditor")
+	}
 	storedSecretKey, err := s.protector.Protect(ctx, secretKey)
 	if err != nil {
 		return fmt.Errorf("merchant secret protection failed: %w", err)
 	}
 
 	_, err = s.pool.Exec(ctx, `
-INSERT INTO merchants (merchant_id, name, api_key_hash, secret_key, active)
-VALUES ($1, $2, $3, $4, TRUE)
+INSERT INTO merchants (merchant_id, name, api_key_hash, secret_key, role, active)
+VALUES ($1, $2, $3, $4, $5, TRUE)
 ON CONFLICT (merchant_id) DO UPDATE
 SET
     name = EXCLUDED.name,
     api_key_hash = EXCLUDED.api_key_hash,
     secret_key = EXCLUDED.secret_key,
+    role = EXCLUDED.role,
     active = TRUE,
     updated_at = NOW()
-`, merchantID, merchantName, sha256Hex(apiKey), storedSecretKey)
+`, merchantID, merchantName, sha256Hex(apiKey), storedSecretKey, string(role))
 	return err
 }
 
@@ -95,7 +103,7 @@ func (s *PostgresMerchantStore) GetByID(ctx context.Context, merchantID string) 
 	var merchant Merchant
 	var storedSecretKey string
 	err := s.pool.QueryRow(ctx, `
-SELECT merchant_id, name, api_key_hash, secret_key, active
+SELECT merchant_id, name, api_key_hash, secret_key, role, active
 FROM merchants
 WHERE merchant_id = $1
 LIMIT 1
@@ -104,6 +112,7 @@ LIMIT 1
 		&merchant.Name,
 		&merchant.APIKeyHash,
 		&storedSecretKey,
+		&merchant.Role,
 		&merchant.Active,
 	)
 	if err != nil {

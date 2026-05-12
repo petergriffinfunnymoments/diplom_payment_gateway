@@ -17,11 +17,16 @@ const defaultLimit = 100
 const maxLimit = 500
 
 type Handler struct {
-	store contracts.TransactionReportStore
+	store  contracts.TransactionReportStore
+	logger contracts.EventLogger
 }
 
 func NewTransactionReportHandler(store contracts.TransactionReportStore) http.Handler {
-	return &Handler{store: store}
+	return NewTransactionReportHandlerWithLogger(store, nil)
+}
+
+func NewTransactionReportHandlerWithLogger(store contracts.TransactionReportStore, logger contracts.EventLogger) http.Handler {
+	return &Handler{store: store, logger: logger}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -56,11 +61,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	headerMerchantID := strings.TrimSpace(r.Header.Get(merchantauth.HeaderMerchantID))
-	if headerMerchantID != "" && filter.MerchantID != headerMerchantID {
+	authMerchant, ok := merchantauth.MerchantFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, dto.TransactionReportResponse{
+			Success: false,
+			Error:   &dto.GatewayError{Code: "AUTH_CONTEXT_MISSING", Message: "authenticated merchant context is required"},
+		})
+		return
+	}
+	if !merchantauth.CanReadMerchantData(authMerchant, filter.MerchantID) {
+		merchantauth.LogAuthorizationFailed(r.Context(), h.logger, authMerchant, filter.MerchantID, "GET /reports/transactions", "transaction report access is not allowed for this role or merchant")
 		writeJSON(w, http.StatusForbidden, dto.TransactionReportResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "MERCHANT_SCOPE_MISMATCH", Message: "merchant_id must match X-Merchant-ID"},
+			Error:   &dto.GatewayError{Code: "MERCHANT_SCOPE_MISMATCH", Message: "transaction report access is not allowed for this role or merchant"},
 		})
 		return
 	}

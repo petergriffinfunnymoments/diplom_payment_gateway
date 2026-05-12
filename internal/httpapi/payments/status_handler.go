@@ -11,6 +11,7 @@ import (
 
 	"payment-gateway/internal/contracts"
 	"payment-gateway/internal/dto"
+	"payment-gateway/internal/subsystems/merchantauth"
 )
 
 type getPaymentStatusRequest struct {
@@ -26,6 +27,10 @@ type statusErrorResponse struct {
 // NewGetPaymentStatusHandler создаёт HTTP handler для GET /payments/{payment_id}.
 // MerchantID передаётся query-параметром: /payments/pay_123?merchant_id=merchant_12345.
 func NewGetPaymentStatusHandler(store contracts.TransactionStore) http.Handler {
+	return NewGetPaymentStatusHandlerWithLogger(store, nil)
+}
+
+func NewGetPaymentStatusHandlerWithLogger(store contracts.TransactionStore, logger contracts.EventLogger) http.Handler {
 	getPaymentStatusEndpoint := endpoint.Endpoint(func(ctx context.Context, request interface{}) (interface{}, error) {
 		req, ok := request.(getPaymentStatusRequest)
 		if !ok {
@@ -37,6 +42,14 @@ func NewGetPaymentStatusHandler(store contracts.TransactionStore) http.Handler {
 		}
 		if req.PaymentID == "" {
 			return statusErrorResponse{Code: "BAD_REQUEST", Message: "payment_id is required"}, nil
+		}
+		authMerchant, ok := merchantauth.MerchantFromContext(ctx)
+		if !ok {
+			return statusErrorResponse{Code: "AUTH_CONTEXT_MISSING", Message: "authenticated merchant context is required"}, nil
+		}
+		if !merchantauth.CanReadMerchantData(authMerchant, req.MerchantID) {
+			merchantauth.LogAuthorizationFailed(ctx, logger, authMerchant, req.MerchantID, "GET /payments/{payment_id}", "payment status access is not allowed for this role or merchant")
+			return statusErrorResponse{Code: "FORBIDDEN", Message: "payment status access is not allowed for this role or merchant"}, nil
 		}
 
 		_, payloadJSON, found, err := store.GetByPaymentID(ctx, req.MerchantID, req.PaymentID)
@@ -72,6 +85,10 @@ func NewGetPaymentStatusHandler(store contracts.TransactionStore) http.Handler {
 			switch errResp.Code {
 			case "BAD_REQUEST":
 				w.WriteHeader(http.StatusBadRequest)
+			case "AUTH_CONTEXT_MISSING":
+				w.WriteHeader(http.StatusUnauthorized)
+			case "FORBIDDEN":
+				w.WriteHeader(http.StatusForbidden)
 			case "PAYMENT_NOT_FOUND":
 				w.WriteHeader(http.StatusNotFound)
 			default:

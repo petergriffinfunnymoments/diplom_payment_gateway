@@ -20,6 +20,7 @@ func NewStaticMerchantStoreFromEnv() *StaticMerchantStore {
 			Name:       getenvStatic("MERCHANT_NAME", "Демонстрационный интернет-магазин"),
 			APIKeyHash: sha256Hex(apiKey),
 			SecretKey:  secretKey,
+			Role:       MerchantRole(getenvStatic("MERCHANT_ROLE", string(RoleMerchant))),
 			Active:     true,
 		},
 	}
