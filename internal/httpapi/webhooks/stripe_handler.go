@@ -91,7 +91,9 @@ func (h *StripeWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	idempotencyKey := strings.TrimSpace(firstNonEmpty(session.Metadata.IdempotencyKey, session.MetadataMap["idempotency_key"]))
 
 	if merchantID == "" || paymentID == "" || idempotencyKey == "" {
-		_ = h.log(ctxWithTimeout(r.Context()), contracts.PaymentEvent{
+		logCtx, cancel := ctxWithTimeout(r.Context())
+		defer cancel()
+		_ = h.log(logCtx, contracts.PaymentEvent{
 			Type:          contracts.EventPaymentFailed,
 			Level:         contracts.LogLevelWarn,
 			Service:       "adapter",

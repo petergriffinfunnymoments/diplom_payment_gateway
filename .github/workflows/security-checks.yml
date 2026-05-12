@@ -1,0 +1,28 @@
+name: Security Checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-checks:
+    name: Go tests, vet, vulnerabilities, and secret scan
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.10"
+          cache: true
+
+      - name: Run security checks
+        shell: pwsh
+        run: .\payment_gateway_tools\security-check.ps1 -InstallMissingTools -RequireGovulncheck

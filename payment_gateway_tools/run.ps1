@@ -12,7 +12,7 @@ if (Test-Path $LocalConfig) {
     Write-Host "Create it from payment_gateway_tools/run.local.example.ps1 and put your real keys there." -ForegroundColor Yellow
 
     if (-not $env:DATABASE_URL) {
-        $env:DATABASE_URL = "postgres://postgres:886540@localhost:5432/payment_gateway?sslmode=disable"
+        Write-Host "DATABASE_URL is not set. Load payment_gateway_tools/run.local.ps1 with your local connection string." -ForegroundColor Yellow
     }
 
     if (-not $env:PAYMENT_RETURN_URL) {

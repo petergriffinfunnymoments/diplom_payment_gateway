@@ -15,6 +15,7 @@
 - Добавлена ролевая модель `merchant/admin/auditor`: обычный мерчант получает доступ только к своим платежам, возвратам и отчётам; `admin` может работать с данными любого мерчанта; `auditor` имеет read-only доступ к статусам, возвратам и отчётам.
 - Неизвестные роли отклоняются при аутентификации, а отказы доступа логируются событием `authorization_failed`.
 - Добавлены транспортные меры для PCI DSS Requirement 4: опциональный запуск через `ListenAndServeTLS`, режим `REQUIRE_HTTPS`, поддержка `X-Forwarded-Proto` при `TRUST_PROXY_HEADERS=true`, security headers и запрет `http://` в `PAYMENT_RETURN_URL`/`MERCHANT_WEBHOOK_URL` при включённом HTTPS enforcement.
+- Добавлены регулярные security checks для PCI DSS Requirement 11: `go test`, `go vet`, `govulncheck`, проверка секретов в отслеживаемых файлах и GitHub Actions workflow.
 
 Ограничения:
 
@@ -22,12 +23,18 @@
 - Для реального сокращения scope нужно переходить на hosted checkout/hosted fields/iframe внешнего PCI DSS-compliant провайдера или выносить token vault в отдельный CDE-сегмент.
 - Старые записи в `payment_transactions.payload_json`, созданные до этой правки, нужно очистить отдельной миграцией, если в них уже есть PAN/CVV.
 - LocalTunnel подходит для демонстрации webhook-ов, но production-контур должен использовать контролируемый TLS/reverse proxy. Если TLS завершается на proxy, включай `REQUIRE_HTTPS=true` и `TRUST_PROXY_HEADERS=true`.
-- Vault, TLS и RBAC не заменяют SIEM, vulnerability scans, pentest и организационные PCI DSS-контроли.
+- Локальные security checks и CI не заменяют external ASV scans, internal vulnerability scans, penetration testing, IDS/FIM, SIEM и организационные PCI DSS-контроли.
 
 Проверка:
 
 ```powershell
 go test ./...
+```
+
+Расширенная security-проверка:
+
+```powershell
+.\payment_gateway_tools\security-check.ps1 -InstallMissingTools
 ```
 
 Smoke-test по БД после нового платежа:

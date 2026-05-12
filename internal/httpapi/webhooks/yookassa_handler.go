@@ -81,7 +81,9 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if merchantID == "" || paymentID == "" || idempotencyKey == "" {
 		// Уведомление настоящее по формату, но мы не можем связать его с внутренней транзакцией.
 		// Возвращаем 200, чтобы ЮKassa не присылала одно и то же уведомление повторно.
-		_ = h.log(ctxWithTimeout(r.Context()), contracts.PaymentEvent{
+		logCtx, cancel := ctxWithTimeout(r.Context())
+		defer cancel()
+		_ = h.log(logCtx, contracts.PaymentEvent{
 			Type:          contracts.EventPaymentFailed,
 			Level:         contracts.LogLevelWarn,
 			Service:       "adapter",
@@ -280,9 +282,8 @@ func (h *YooKassaWebhookHandler) log(ctx context.Context, event contracts.Paymen
 	return h.logger.Log(ctx, event)
 }
 
-func ctxWithTimeout(parent context.Context) context.Context {
-	ctx, _ := context.WithTimeout(parent, 3*time.Second)
-	return ctx
+func ctxWithTimeout(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, 3*time.Second)
 }
 
 func gatewayErrorCodeFromYooKassaCancellation(reason string) string {
