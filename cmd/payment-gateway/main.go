@@ -48,6 +48,12 @@ func main() {
 		appEnv = "dev"
 	}
 	transportSecurity := paymentsecurity.TransportConfigFromEnv()
+	networkSecurity, networkErr := paymentsecurity.NetworkConfigFromEnv()
+	if networkErr != nil {
+		logger.Log("level", "error", "msg", "invalid network security configuration", "err", networkErr.Error())
+		os.Exit(1)
+	}
+	transportSecurity.TrustedProxyCIDRs = networkSecurity.TrustedProxyCIDRs
 	tlsCertFile := strings.TrimSpace(os.Getenv("TLS_CERT_FILE"))
 	tlsKeyFile := strings.TrimSpace(os.Getenv("TLS_KEY_FILE"))
 	if err := paymentsecurity.ValidateTLSConfig(tlsCertFile, tlsKeyFile); err != nil {
@@ -56,6 +62,10 @@ func main() {
 	}
 	if transportSecurity.RequireHTTPS && tlsCertFile == "" && !transportSecurity.TrustProxyHeaders {
 		logger.Log("level", "error", "msg", "HTTPS enforcement requires TLS_CERT_FILE/TLS_KEY_FILE or TRUST_PROXY_HEADERS=true")
+		os.Exit(1)
+	}
+	if paymentsecurity.IsProductionEnv(appEnv) && transportSecurity.TrustProxyHeaders && len(networkSecurity.TrustedProxyCIDRs) == 0 {
+		logger.Log("level", "error", "msg", "TRUSTED_PROXY_CIDRS must be set when TRUST_PROXY_HEADERS=true in production")
 		os.Exit(1)
 	}
 	if err := paymentsecurity.ValidateOutboundURLs(transportSecurity.RequireHTTPS, map[string]string{
@@ -171,13 +181,20 @@ func main() {
 	}
 
 	orchestrator := orchestratorSimple.NewSimpleOrchestratorWithRouting(store, eventLogger, tokenizerService, notificationService, routeStore)
-	mux.Handle("/payments", authenticator.Middleware(payments.NewCreatePaymentHandler(orchestrator, eventLogger)))
-	mux.Handle("/payments/", authenticator.Middleware(payments.NewGetPaymentStatusHandlerWithLogger(store, eventLogger)))
+	authenticated := func(next http.Handler) http.Handler {
+		return authenticator.Middleware(paymentsecurity.AuthenticatedNetworkMiddleware(networkSecurity, eventLogger, next))
+	}
+	providerWebhook := func(next http.Handler) http.Handler {
+		return paymentsecurity.WebhookNetworkMiddleware(networkSecurity, eventLogger, next)
+	}
+
+	mux.Handle("/payments", authenticated(payments.NewCreatePaymentHandler(orchestrator, eventLogger)))
+	mux.Handle("/payments/", authenticated(payments.NewGetPaymentStatusHandlerWithLogger(store, eventLogger)))
 	refundHandler := refunds.NewRefundHandler(store, refundStore, adapter.NewFactoryFromEnv(), eventLogger)
-	mux.Handle("/refunds/", authenticator.Middleware(refundHandler))
-	mux.Handle("/reports/transactions", authenticator.Middleware(reports.NewTransactionReportHandlerWithLogger(reportStore, eventLogger)))
-	mux.Handle("/webhooks/yookassa", webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService))
-	mux.Handle("/webhooks/stripe", webhooks.NewStripeWebhookHandler(store, eventLogger, notificationService))
+	mux.Handle("/refunds/", authenticated(refundHandler))
+	mux.Handle("/reports/transactions", authenticated(reports.NewTransactionReportHandlerWithLogger(reportStore, eventLogger)))
+	mux.Handle("/webhooks/yookassa", providerWebhook(webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService)))
+	mux.Handle("/webhooks/stripe", providerWebhook(webhooks.NewStripeWebhookHandler(store, eventLogger, notificationService)))
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))
 
 	secured := paymentsecurity.Middleware(transportSecurity, mux)

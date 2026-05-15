@@ -40,10 +40,15 @@ func TestMiddlewareRejectsHTTPWhenHTTPSRequired(t *testing.T) {
 }
 
 func TestMiddlewareAllowsTrustedForwardedHTTPS(t *testing.T) {
-	handler := Middleware(TransportConfig{RequireHTTPS: true, TrustProxyHeaders: true}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxyCIDRs, err := ParseCIDRList("127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Middleware(TransportConfig{RequireHTTPS: true, TrustProxyHeaders: true, TrustedProxyCIDRs: proxyCIDRs}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	req := httptest.NewRequest(http.MethodPost, "http://example.test/payments", strings.NewReader("{}"))
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("X-Forwarded-Proto", "https")
 
 	rec := httptest.NewRecorder()
@@ -54,6 +59,26 @@ func TestMiddlewareAllowsTrustedForwardedHTTPS(t *testing.T) {
 	}
 	if rec.Header().Get("Strict-Transport-Security") == "" {
 		t.Fatal("expected HSTS for trusted HTTPS request")
+	}
+}
+
+func TestMiddlewareIgnoresForwardedHTTPSFromUntrustedProxy(t *testing.T) {
+	proxyCIDRs, err := ParseCIDRList("127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Middleware(TransportConfig{RequireHTTPS: true, TrustProxyHeaders: true, TrustedProxyCIDRs: proxyCIDRs}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("next handler must not be called")
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://example.test/payments", strings.NewReader("{}"))
+	req.RemoteAddr = "198.51.100.10:12345"
+	req.Header.Set("X-Forwarded-Proto", "https")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUpgradeRequired {
+		t.Fatalf("expected 426, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

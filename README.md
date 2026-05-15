@@ -576,6 +576,7 @@ notification_sent
 notification_failed
 merchant_webhook_received
 authorization_failed
+network_access_denied
 refund_requested
 refund_adapter_called
 refund_adapter_result_received
@@ -701,7 +702,10 @@ $env:REQUIRE_HTTPS="true"
 ```powershell
 $env:REQUIRE_HTTPS="true"
 $env:TRUST_PROXY_HEADERS="true"
+$env:TRUSTED_PROXY_CIDRS="127.0.0.1/32"
 ```
+
+Если задан `TRUSTED_PROXY_CIDRS`, шлюз доверяет `X-Forwarded-Proto`, `X-Forwarded-For`, `X-Real-IP` и `Forwarded` только запросам от этих proxy. В `APP_ENV=production` при `TRUST_PROXY_HEADERS=true` значение `TRUSTED_PROXY_CIDRS` обязательно.
 
 При `REQUIRE_HTTPS=true` значения `PAYMENT_RETURN_URL` и `MERCHANT_WEBHOOK_URL` должны начинаться с `https://`.
 
@@ -714,6 +718,43 @@ Referrer-Policy: no-referrer
 Cache-Control: no-store
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
+
+## Network Security Controls
+
+Для частичной реализации PCI DSS Requirement 1 шлюз поддерживает IP/CIDR allowlist на уровне приложения.
+
+Переменные:
+
+```powershell
+$env:TRUSTED_PROXY_CIDRS="127.0.0.1/32,10.0.0.0/8"
+$env:MERCHANT_ALLOWED_CIDRS="203.0.113.10/32"
+$env:ADMIN_ALLOWED_CIDRS="198.51.100.0/24"
+$env:WEBHOOK_ALLOWED_CIDRS="203.0.113.0/24"
+```
+
+Смысл:
+
+```text
+TRUSTED_PROXY_CIDRS   -> от каких proxy можно принимать X-Forwarded-For/X-Real-IP/Forwarded
+MERCHANT_ALLOWED_CIDRS -> откуда обычные merchant-ключи могут создавать платежи и возвраты
+ADMIN_ALLOWED_CIDRS   -> откуда admin/auditor могут читать или управлять данными
+WEBHOOK_ALLOWED_CIDRS -> откуда принимаются webhook-и YooKassa/Stripe
+```
+
+Если allowlist-переменная пустая, соответствующий класс запросов не ограничивается по IP. Это оставлено для локальной разработки и Postman. В production лучше задавать allowlist-и явно.
+
+При нарушении правила шлюз возвращает:
+
+```json
+{
+  "code": "NETWORK_ACCESS_DENIED",
+  "message": "request source IP is not allowed"
+}
+```
+
+Отказ логируется событием `network_access_denied`.
+
+Это не заменяет firewall/reverse proxy: PostgreSQL и Vault всё равно должны быть закрыты от интернета и доступны только внутреннему контуру шлюза.
 
 ## LocalTunnel
 
@@ -735,6 +776,7 @@ LocalTunnel подходит для демонстрации webhook-ов, но 
 Проект не является PCI DSS certified. Реализованы учебные технические меры, которые приближают шлюз к отдельным требованиям PCI DSS v4.0.1:
 
 ```text
+Requirement 1  -> IP/CIDR allowlist, trusted proxy CIDR, webhook source restrictions, network_access_denied logs
 Requirement 3  -> маскирование PAN, удаление CVV, token_hash/token_preview, Vault для secret_key
 Requirement 4  -> HTTPS enforcement, TLS mode, proxy headers, security headers
 Requirement 6  -> тесты, безопасная обработка ошибок, security-focused checks
@@ -749,6 +791,7 @@ Requirement 11 -> go test, go vet, govulncheck, secret scan, GitHub Actions
 ```text
 backend всё ещё принимает PAN/CVV во входном JSON для учебного сценария;
 для промышленного сокращения PCI scope нужен hosted checkout/hosted fields/iframe;
+сетевые allowlist-и в приложении не заменяют firewall, reverse proxy и сегментацию сети;
 нужны external ASV scans, penetration testing, IDS/FIM, SIEM и организационные процессы;
 старые записи БД, созданные до маскирования, нужно очищать отдельной миграцией.
 ```

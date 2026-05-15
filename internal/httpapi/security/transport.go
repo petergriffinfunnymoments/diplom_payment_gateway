@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 type TransportConfig struct {
 	RequireHTTPS      bool
 	TrustProxyHeaders bool
+	TrustedProxyCIDRs []*net.IPNet
 }
 
 type ErrorResponse struct {
@@ -30,7 +32,7 @@ func TransportConfigFromEnv() TransportConfig {
 func Middleware(cfg TransportConfig, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		SetSecurityHeaders(w, r, cfg)
-		if cfg.RequireHTTPS && !IsSecureRequest(r, cfg.TrustProxyHeaders) {
+		if cfg.RequireHTTPS && !IsSecureRequestWithTrustedProxies(r, cfg.TrustProxyHeaders, cfg.TrustedProxyCIDRs) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusUpgradeRequired)
 			_ = json.NewEncoder(w).Encode(ErrorResponse{
@@ -48,12 +50,16 @@ func SetSecurityHeaders(w http.ResponseWriter, r *http.Request, cfg TransportCon
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Cache-Control", "no-store")
-	if IsSecureRequest(r, cfg.TrustProxyHeaders) {
+	if IsSecureRequestWithTrustedProxies(r, cfg.TrustProxyHeaders, cfg.TrustedProxyCIDRs) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 	}
 }
 
 func IsSecureRequest(r *http.Request, trustProxyHeaders bool) bool {
+	return IsSecureRequestWithTrustedProxies(r, trustProxyHeaders, nil)
+}
+
+func IsSecureRequestWithTrustedProxies(r *http.Request, trustProxyHeaders bool, trustedProxyCIDRs []*net.IPNet) bool {
 	if r == nil {
 		return false
 	}
@@ -61,6 +67,9 @@ func IsSecureRequest(r *http.Request, trustProxyHeaders bool) bool {
 		return true
 	}
 	if !trustProxyHeaders {
+		return false
+	}
+	if len(trustedProxyCIDRs) > 0 && !IPAllowed(RemoteIP(r.RemoteAddr), trustedProxyCIDRs) {
 		return false
 	}
 	if strings.EqualFold(firstHeaderValue(r.Header.Get("X-Forwarded-Proto")), "https") {

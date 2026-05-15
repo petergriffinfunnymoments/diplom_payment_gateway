@@ -18,5 +18,12 @@
 # For production/reverse proxy/localtunnel-like HTTPS termination:
 # $env:REQUIRE_HTTPS="true"
 # $env:TRUST_PROXY_HEADERS="true"
+# $env:TRUSTED_PROXY_CIDRS="127.0.0.1/32"
 #
 # When REQUIRE_HTTPS=true, PAYMENT_RETURN_URL and MERCHANT_WEBHOOK_URL must use https://.
+
+# Optional PCI DSS Requirement 1 network security controls.
+# Empty values mean "do not restrict this class of requests by IP" for local development.
+# $env:MERCHANT_ALLOWED_CIDRS="203.0.113.10/32"
+# $env:ADMIN_ALLOWED_CIDRS="198.51.100.0/24"
+# $env:WEBHOOK_ALLOWED_CIDRS="203.0.113.0/24"

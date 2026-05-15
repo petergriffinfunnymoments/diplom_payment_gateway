@@ -24,6 +24,7 @@ const (
 	EventNotificationFailed      PaymentEventType = "notification_failed"
 	EventMerchantWebhookReceived PaymentEventType = "merchant_webhook_received"
 	EventAuthorizationFailed     PaymentEventType = "authorization_failed"
+	EventNetworkAccessDenied     PaymentEventType = "network_access_denied"
 	EventRefundRequested         PaymentEventType = "refund_requested"
 	EventRefundAdapterCalled     PaymentEventType = "refund_adapter_called"
 	EventRefundAdapterResult     PaymentEventType = "refund_adapter_result_received"

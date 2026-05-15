@@ -133,7 +133,8 @@ INSERT INTO log_events (code, name, description) VALUES
 ('notification_sent', 'Уведомление отправлено', 'Сервис уведомлений отправил webhook интернет-магазину'),
 ('notification_failed', 'Ошибка уведомления', 'Сервис уведомлений не смог доставить webhook интернет-магазину'),
 ('merchant_webhook_received', 'Webhook магазина получен', 'Демонстрационный интернет-магазин получил уведомление от платежного шлюза'),
-('authorization_failed', 'Отказ в доступе', 'Запрос отклонён из-за недостаточных прав или нарушения границ мерчанта')
+('authorization_failed', 'Отказ в доступе', 'Запрос отклонён из-за недостаточных прав или нарушения границ мерчанта'),
+('network_access_denied', 'Сетевой отказ в доступе', 'Запрос отклонён из-за нарушения IP/CIDR allowlist')
 ON CONFLICT (code) DO NOTHING;
 `)
 	return err
