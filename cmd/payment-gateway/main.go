@@ -180,9 +180,6 @@ func main() {
 	mux.Handle("/webhooks/stripe", webhooks.NewStripeWebhookHandler(store, eventLogger, notificationService))
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))
 
-	// Статика (web/index.html и web/static/*)
-	mux.Handle("/", http.FileServer(http.Dir("web")))
-
 	secured := paymentsecurity.Middleware(transportSecurity, mux)
 	logged := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
