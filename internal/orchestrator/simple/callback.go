@@ -77,6 +77,7 @@ func (c *simpleCallbackHandler) HandleCallback(
 			PaymentURL:            adapterResult.PaymentURL,
 			QRID:                  adapterResult.QRID,
 			QRPayload:             adapterResult.QRPayload,
+			QRImageDataURI:        adapterResult.QRImageDataURI,
 			QRExpiresAt:           formatOptionalTime(adapterResult.QRExpiresAt),
 			ParticipantBank:       adapterResult.ParticipantBank,
 			SchemaVersion:         adapterResult.SchemaVersion,

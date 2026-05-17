@@ -46,6 +46,7 @@ type MerchantNotificationPayload struct {
 	ExternalID           string          `json:"external_transaction_id,omitempty"`
 	QRID                 string          `json:"qr_id,omitempty"`
 	QRPayload            string          `json:"qr_payload,omitempty"`
+	QRImageDataURI       string          `json:"qr_image_data_uri,omitempty"`
 	QRExpiresAt          string          `json:"qr_expires_at,omitempty"`
 	ParticipantBank      string          `json:"participant_bank,omitempty"`
 	SchemaVersion        string          `json:"schema_version,omitempty"`
@@ -113,6 +114,7 @@ func (n *WebhookNotifications) Notify(ctx context.Context, resp dto.PaymentRespo
 		ExternalID:           resp.TransactionDetails.ExternalTransactionID,
 		QRID:                 resp.TransactionDetails.QRID,
 		QRPayload:            resp.TransactionDetails.QRPayload,
+		QRImageDataURI:       resp.TransactionDetails.QRImageDataURI,
 		QRExpiresAt:          resp.TransactionDetails.QRExpiresAt,
 		ParticipantBank:      resp.TransactionDetails.ParticipantBank,
 		SchemaVersion:        resp.TransactionDetails.SchemaVersion,

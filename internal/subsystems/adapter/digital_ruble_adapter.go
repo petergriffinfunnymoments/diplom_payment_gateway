@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
@@ -11,6 +12,8 @@ import (
 
 	"payment-gateway/internal/contracts"
 	"payment-gateway/internal/dto"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 type DigitalRubleAdapter struct {
@@ -53,21 +56,20 @@ func (a *DigitalRubleAdapter) Send(ctx context.Context, token string, req dto.Cr
 	externalID := fmt.Sprintf("drub_%d", time.Now().UnixNano())
 	expiresAt := time.Now().UTC().Add(a.qrTTL)
 
-	status, providerStatus, errCode, errMsg := emulateDigitalRubleStatus(walletID)
+	qrPayload := a.qrPayload(qrID, req, walletID)
 	return contracts.AdapterResult{
 		ExternalTransactionID: externalID,
 		PaymentSystem:         "DIGITAL_RUBLE",
-		Status:                status,
-		ProviderStatus:        providerStatus,
-		ErrorCode:             errCode,
+		Status:                string(dto.StatusPending),
+		ProviderStatus:        "qr_issued",
 		PaymentURL:            "digital-ruble://pay?" + digitalRubleQuery(qrID, req),
 		QRID:                  qrID,
-		QRPayload:             a.qrPayload(qrID, req, walletID),
+		QRPayload:             qrPayload,
+		QRImageDataURI:        qrImageDataURI(qrPayload),
 		QRExpiresAt:           expiresAt,
 		ParticipantBank:       a.participantBank,
 		SchemaVersion:         a.schemaVersion,
 		SettlementHint:        "RUB + DIGITAL_RUBLE; settlement through participant bank emulator",
-		ErrorMessage:          errMsg,
 	}, nil
 }
 
@@ -110,6 +112,18 @@ func (a *DigitalRubleAdapter) qrPayload(qrID string, req dto.CreatePaymentReques
 	return "drub://" + values.Encode()
 }
 
+func qrImageDataURI(payload string) string {
+	payload = strings.TrimSpace(payload)
+	if payload == "" {
+		return ""
+	}
+	png, err := qrcode.Encode(payload, qrcode.Medium, 256)
+	if err != nil {
+		return ""
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+}
+
 func digitalRubleQuery(qrID string, req dto.CreatePaymentRequest) string {
 	values := url.Values{}
 	values.Set("qr_id", qrID)
@@ -127,20 +141,5 @@ func digitalRubleWalletID(req dto.CreatePaymentRequest) string {
 		return strings.TrimSpace(customer.DigitalRubleIdentifier)
 	default:
 		return strings.TrimSpace(customer.DigitalWalletID)
-	}
-}
-
-func emulateDigitalRubleStatus(walletID string) (status string, providerStatus string, errCode string, errMsg string) {
-	switch strings.ToLower(strings.TrimSpace(walletID)) {
-	case "dr_wallet_123":
-		return string(dto.StatusCaptured), "settled", "", ""
-	case "dr_wallet_declined":
-		return string(dto.StatusDeclined), "participant_rejected", dto.ErrorDigitalRubleDeclined, "digital ruble payment rejected by participant bank emulator"
-	case "dr_wallet_error":
-		return string(dto.StatusFailed), "technical_error", dto.ErrorDigitalRubleTechnical, "digital ruble participant bank emulator returned technical error"
-	case "dr_wallet_pending":
-		return string(dto.StatusPending), "awaiting_customer_confirmation", "", ""
-	default:
-		return string(dto.StatusPending), "qr_issued", "", ""
 	}
 }

@@ -93,6 +93,7 @@ type AdapterResult struct {
 	PaymentURL            string // ссылка на платежную форму, если провайдер требует подтверждение пользователя
 	QRID                  string
 	QRPayload             string
+	QRImageDataURI        string
 	QRExpiresAt           time.Time
 	ParticipantBank       string
 	SchemaVersion         string

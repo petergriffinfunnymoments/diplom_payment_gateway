@@ -94,6 +94,7 @@ type TransactionDetails struct {
 	PaymentURL            string `json:"payment_url,omitempty"`
 	QRID                  string `json:"qr_id,omitempty"`
 	QRPayload             string `json:"qr_payload,omitempty"`
+	QRImageDataURI        string `json:"qr_image_data_uri,omitempty"`
 	QRExpiresAt           string `json:"qr_expires_at,omitempty"`
 	ParticipantBank       string `json:"participant_bank,omitempty"`
 	SchemaVersion         string `json:"schema_version,omitempty"`

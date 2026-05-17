@@ -9,7 +9,7 @@ import (
 	"payment-gateway/internal/dto"
 )
 
-func TestDigitalRubleAdapterCapturedScenario(t *testing.T) {
+func TestDigitalRubleAdapterReturnsPendingQRCode(t *testing.T) {
 	a := NewDigitalRubleAdapterFromEnv()
 
 	result, err := a.Send(context.Background(), "tok_test", digitalRubleRequest("dr_wallet_123"))
@@ -20,30 +20,20 @@ func TestDigitalRubleAdapterCapturedScenario(t *testing.T) {
 	if result.PaymentSystem != "DIGITAL_RUBLE" {
 		t.Fatalf("unexpected payment system: %s", result.PaymentSystem)
 	}
-	if result.Status != string(dto.StatusCaptured) {
-		t.Fatalf("expected captured, got %s", result.Status)
+	if result.Status != string(dto.StatusPending) {
+		t.Fatalf("expected pending, got %s", result.Status)
+	}
+	if result.ProviderStatus != "qr_issued" {
+		t.Fatalf("expected qr_issued, got %s", result.ProviderStatus)
 	}
 	if result.QRID == "" || result.QRPayload == "" {
 		t.Fatalf("expected qr fields to be set: %+v", result)
 	}
+	if !strings.HasPrefix(result.QRImageDataURI, "data:image/png;base64,") {
+		t.Fatalf("expected qr image data URI, got %q", result.QRImageDataURI)
+	}
 	if !strings.Contains(result.QRPayload, "rail=DIGITAL_RUBLE") {
 		t.Fatalf("unexpected qr payload: %s", result.QRPayload)
-	}
-}
-
-func TestDigitalRubleAdapterDeclinedScenario(t *testing.T) {
-	a := NewDigitalRubleAdapterFromEnv()
-
-	result, err := a.Send(context.Background(), "tok_test", digitalRubleRequest("dr_wallet_declined"))
-	if err != nil {
-		t.Fatalf("send failed: %v", err)
-	}
-
-	if result.Status != string(dto.StatusDeclined) {
-		t.Fatalf("expected declined, got %s", result.Status)
-	}
-	if result.ErrorMessage == "" {
-		t.Fatalf("expected provider error message")
 	}
 }
 

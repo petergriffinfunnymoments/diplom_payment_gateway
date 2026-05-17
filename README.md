@@ -37,7 +37,7 @@ POST /payments
 Финальный статус может обновляться webhook-ом от внешнего провайдера:
 
 ```text
-provider webhook -> /webhooks/yookassa или /webhooks/stripe -> DB -> merchant notification
+provider webhook -> /webhooks/yookassa, /webhooks/stripe или /webhooks/digital-ruble -> DB -> merchant notification
 ```
 
 ## Быстрый запуск
@@ -124,6 +124,7 @@ GET  /payments/__auth_check__ - Check current credentials
 POST /payments - Card MIR
 POST /payments - Card Visa
 POST /payments - Digital Ruble
+POST /sandbox/digital-ruble/scan - Capture QR
 GET  /payments/{payment_id}
 POST /refunds/full/create
 POST /refunds/partial/create
@@ -261,6 +262,7 @@ YOOKASSA_FRAUD_SUSPECTED    -> YooKassa вернула fraud_suspected
 STRIPE_PAYMENT_DECLINED     -> Stripe Checkout сообщил об отказе/истечении сессии
 DIGITAL_RUBLE_PAYMENT_DECLINED -> эмулятор цифрового рубля отклонил платёж
 DIGITAL_RUBLE_TECHNICAL_ERROR  -> техническая ошибка эмулятора цифрового рубля
+DIGITAL_RUBLE_QR_EXPIRED       -> QR-код цифрового рубля истёк до подтверждения
 ```
 
 Для возвратов и отчётов используются дополнительные коды:
@@ -348,10 +350,12 @@ limit
 ```text
 POST /webhooks/yookassa
 POST /webhooks/stripe
+POST /webhooks/digital-ruble
+POST /sandbox/digital-ruble/scan
 POST /merchant/webhook
 ```
 
-Webhook-и внешних платежных систем не требуют merchant HMAC. Demo endpoint `/merchant/webhook` нужен для локальной проверки уведомлений интернет-магазина.
+Webhook-и внешних платежных систем не требуют merchant HMAC. `/sandbox/digital-ruble/scan` — тестовый endpoint для эмуляции сканирования QR и подтверждения цифрового рубля. Demo endpoint `/merchant/webhook` нужен для локальной проверки уведомлений интернет-магазина.
 
 ## Merchant Authentication
 
@@ -534,14 +538,11 @@ Digital Ruble является эмуляционным адаптером ба�
 
 Также поддерживаются `digital_ruble_identifier` и совместимый fallback `digital_wallet_id`.
 
-Тестовые сценарии:
+Создание платежа цифровым рублем всегда возвращает QR и статус ожидания:
 
 ```text
-dr_wallet_123      -> CAPTURED
-dr_wallet_declined -> DECLINED
-dr_wallet_error    -> FAILED
-dr_wallet_pending  -> PENDING
-другое значение    -> PENDING, provider_status=qr_issued
+current_status = PENDING
+provider_status = qr_issued
 ```
 
 Ответ содержит поля QR/банка-участника:
@@ -551,12 +552,43 @@ dr_wallet_pending  -> PENDING
   "payment_system": "DIGITAL_RUBLE",
   "qr_id": "drqr_...",
   "qr_payload": "drub://...",
+  "qr_image_data_uri": "data:image/png;base64,...",
   "qr_expires_at": "...",
   "participant_bank": "BANK_PARTNER_1",
   "schema_version": "drub.v1",
   "settlement_hint": "RUB + DIGITAL_RUBLE; settlement through participant bank emulator"
 }
 ```
+
+`qr_payload` — строковая полезная нагрузка QR. `qr_image_data_uri` — PNG-изображение QR-кода в формате data URI, чтобы его можно было сразу показать в Postman Visualizer или на стороне тестового клиента.
+
+Подтверждение оплаты эмулируется отдельным sandbox endpoint-ом:
+
+```text
+POST /sandbox/digital-ruble/scan
+```
+
+Пример:
+
+```json
+{
+  "merchant_id": "merchant_12345",
+  "payment_id": "pay_...",
+  "qr_id": "drqr_...",
+  "result": "captured"
+}
+```
+
+Поддерживаемые sandbox-результаты:
+
+```text
+captured -> CAPTURED
+declined -> DECLINED
+failed   -> FAILED
+expired  -> CANCELLED
+```
+
+Если QR уже истёк, попытка `captured` завершится `CANCELLED` с ошибкой `DIGITAL_RUBLE_QR_EXPIRED`.
 
 Опциональные переменные:
 

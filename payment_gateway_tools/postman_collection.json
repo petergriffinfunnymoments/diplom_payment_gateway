@@ -118,6 +118,9 @@
           "  .badge-red { background: #fde2e2; color: #b42318; }",
           "  .badge-grey { background: #e8edf4; color: #4f5d72; }",
           "  code { font-family: Consolas, 'Courier New', monospace; font-size: 12px; background: #f5f7fa; padding: 6px 8px; border-radius: 6px; display: block; white-space: pre-wrap; word-break: break-all; }",
+          "  .qr-preview { display: inline-flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }",
+          "  .qr-preview img { width: 180px; height: 180px; image-rendering: pixelated; border: 8px solid #fff; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.10); }",
+          "  .qr-caption { color: #667085; font-size: 12px; font-weight: 700; }",
           "  .architecture { background: #f8fafc; border-radius: 8px; padding: 18px; overflow: auto; border: 1px solid #e2e8f0; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7); }",
           "  .diagram-canvas { position: relative; width: 1180px; height: 560px; background: #f8fafc; color: #0f172a; font-family: Inter, 'Segoe UI', Arial, sans-serif; }",
           "  .diagram-node { position: absolute; box-sizing: border-box; background: #fff; border: 2px solid #cbd5e1; border-radius: 8px; padding: 12px 14px; text-align: center; z-index: 3; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }",
@@ -214,6 +217,7 @@
           "        <tr><td>Settlement Hint</td><td>{{txSettlementHint}}</td></tr>",
           "        <tr><td>QR ID</td><td>{{txQrId}}</td></tr>",
           "        <tr><td>QR Expires At</td><td>{{txQrExpiresAt}}</td></tr>",
+          "        <tr><td>QR Image</td><td>{{{txQrImage}}}</td></tr>",
           "        <tr><td>QR Payload</td><td><code>{{txQrPayload}}</code></td></tr>",
           "      </table>",
           "    </div>",
@@ -413,6 +417,11 @@
           "    return `<a href='${safe}' target='_blank'>${safe}</a>`;",
           "  }",
           "",
+          "  function qrImageOrNA(value) {",
+          "    if (!value || String(value).indexOf('data:image/png;base64,') !== 0) return 'N/A';",
+          "    return `<div class='qr-preview'><img alt='Digital ruble QR code' src='${value}'><div class='qr-caption'>Digital Ruble QR</div></div>`;",
+          "  }",
+          "",
           "  function createPayload(response) {",
           "    const pi = response.payment_info || {};",
           "    const amount = pi.amount || {};",
@@ -459,6 +468,7 @@
           "      txSettlementHint: valueOrNA(tx.settlement_hint),",
           "      txQrId: valueOrNA(tx.qr_id),",
           "      txQrExpiresAt: valueOrNA(tx.qr_expires_at),",
+          "      txQrImage: qrImageOrNA(tx.qr_image_data_uri),",
           "      txQrPayload: valueOrNA(tx.qr_payload)",
           "    };",
           "  }",
@@ -641,6 +651,9 @@
                   "}",
                   "if (json.transaction_details && json.transaction_details.qr_payload) {",
                   "  pm.environment.set('digital_ruble_qr_payload', json.transaction_details.qr_payload);",
+                  "}",
+                  "if (json.transaction_details && json.transaction_details.qr_image_data_uri) {",
+                  "  pm.environment.set('digital_ruble_qr_image_data_uri', json.transaction_details.qr_image_data_uri);",
                   "}"
                 ]
               }
@@ -665,6 +678,46 @@
               ],
               "path": [
                 "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /sandbox/digital-ruble/scan - Capture QR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('payment_id', json.id);",
+                  "if (json.current_status) pm.environment.set('payment_status', json.current_status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"qr_id\": \"{{digital_ruble_qr_id}}\",\n  \"result\": \"captured\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sandbox/digital-ruble/scan",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sandbox",
+                "digital-ruble",
+                "scan"
               ]
             }
           }
