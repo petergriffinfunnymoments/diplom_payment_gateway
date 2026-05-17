@@ -38,7 +38,11 @@ func (c *simpleCallbackHandler) HandleCallback(
 		if msg == "" {
 			msg = "payment was declined by external payment provider"
 		}
-		errObj = &dto.GatewayError{Code: "PAYMENT_DECLINED", Message: msg}
+		code := adapterResult.ErrorCode
+		if code == "" {
+			code = dto.ErrorPaymentDeclined
+		}
+		errObj = dto.NewGatewayError(code, msg)
 	default:
 		status = statusFailed
 		fraudCheck = "FAILED"
@@ -46,7 +50,11 @@ func (c *simpleCallbackHandler) HandleCallback(
 		if msg == "" {
 			msg = "payment adapter returned failed status"
 		}
-		errObj = &dto.GatewayError{Code: "ADAPTER_FAILED", Message: msg}
+		code := adapterResult.ErrorCode
+		if code == "" {
+			code = dto.ErrorAdapterFailed
+		}
+		errObj = dto.NewGatewayError(code, msg)
 	}
 
 	return dto.PaymentResponse{

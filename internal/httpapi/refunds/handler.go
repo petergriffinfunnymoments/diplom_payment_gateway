@@ -55,20 +55,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusNotFound, dto.RefundAPIResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "NOT_FOUND", Message: "refund endpoint not found"},
+			Error:   dto.NewGatewayError(dto.ErrorNotFound, "refund endpoint not found"),
 		})
 	}
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request, full bool) {
 	if h.transactions == nil || h.refunds == nil {
-		writeRefundError(w, http.StatusInternalServerError, "REFUND_STORE_UNAVAILABLE", "refund store is not configured")
+		writeRefundError(w, http.StatusInternalServerError, dto.ErrorRefundStoreUnavailable, "refund store is not configured")
 		return
 	}
 
 	req, err := decodeCreateRefundRequest(r)
 	if err != nil {
-		writeRefundError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		writeRefundError(w, http.StatusBadRequest, dto.ErrorBadRequest, err.Error())
 		return
 	}
 	req.MerchantID = strings.TrimSpace(req.MerchantID)
@@ -77,22 +77,22 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, full bool) {
 	req.Reason = strings.TrimSpace(req.Reason)
 
 	if err := validateCreateRefundRequest(req, full); err != nil {
-		writeRefundError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		writeRefundError(w, http.StatusBadRequest, dto.ErrorValidation, err.Error())
 		return
 	}
 	authMerchant, ok := merchantauth.MerchantFromContext(r.Context())
 	if !ok {
-		writeRefundError(w, http.StatusUnauthorized, "AUTH_CONTEXT_MISSING", "authenticated merchant context is required")
+		writeRefundError(w, http.StatusUnauthorized, dto.ErrorAuthContextMissing, "authenticated merchant context is required")
 		return
 	}
 	if !merchantauth.CanWriteMerchantData(authMerchant, req.MerchantID) {
 		merchantauth.LogAuthorizationFailed(r.Context(), h.logger, authMerchant, req.MerchantID, r.Method+" "+r.URL.Path, "refund creation is not allowed for this role or merchant")
-		writeRefundError(w, http.StatusForbidden, "FORBIDDEN", "refund creation is not allowed for this role or merchant")
+		writeRefundError(w, http.StatusForbidden, dto.ErrorForbidden, "refund creation is not allowed for this role or merchant")
 		return
 	}
 
 	if cached, found, err := h.refunds.GetRefundByIdempotencyKey(r.Context(), req.MerchantID, req.IdempotencyKey); err != nil {
-		writeRefundError(w, http.StatusInternalServerError, "REFUND_STORAGE_ERROR", err.Error())
+		writeRefundError(w, http.StatusInternalServerError, dto.ErrorRefundStorage, err.Error())
 		return
 	} else if found {
 		writeJSON(w, http.StatusOK, dto.RefundAPIResponse{Data: &cached, Success: cached.Status != string(dto.RefundStatusFail)})
@@ -101,21 +101,21 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, full bool) {
 
 	_, payloadJSON, found, err := h.transactions.GetByPaymentID(r.Context(), req.MerchantID, req.PaymentID)
 	if err != nil {
-		writeRefundError(w, http.StatusInternalServerError, "PAYMENT_STORAGE_ERROR", err.Error())
+		writeRefundError(w, http.StatusInternalServerError, dto.ErrorPaymentStorage, err.Error())
 		return
 	}
 	if !found {
-		writeRefundError(w, http.StatusNotFound, "PAYMENT_NOT_FOUND", "payment not found")
+		writeRefundError(w, http.StatusNotFound, dto.ErrorPaymentNotFound, "payment not found")
 		return
 	}
 
 	var payment dto.PaymentResponse
 	if err := json.Unmarshal([]byte(payloadJSON), &payment); err != nil {
-		writeRefundError(w, http.StatusInternalServerError, "INVALID_STORED_PAYMENT", err.Error())
+		writeRefundError(w, http.StatusInternalServerError, dto.ErrorInvalidStoredPayment, err.Error())
 		return
 	}
 	if payment.CurrentStatus != string(dto.StatusCaptured) {
-		writeRefundError(w, http.StatusBadRequest, "PAYMENT_NOT_CAPTURED", "refund is allowed only for CAPTURED payments")
+		writeRefundError(w, http.StatusBadRequest, dto.ErrorPaymentNotCaptured, "refund is allowed only for CAPTURED payments")
 		return
 	}
 
@@ -132,12 +132,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, full bool) {
 	provider := providerKey(payment.TransactionDetails.PaymentSystem)
 	paymentAdapter, selectedProvider, err := h.adapterFactory.Resolve(provider, payment.TransactionDetails.PaymentSystem)
 	if err != nil {
-		writeRefundError(w, http.StatusBadGateway, "ADAPTER_FACTORY_ERROR", err.Error())
+		writeRefundError(w, http.StatusBadGateway, dto.ErrorAdapterFactory, err.Error())
 		return
 	}
 	refundAdapter, ok := paymentAdapter.(contracts.RefundAdapter)
 	if !ok {
-		writeRefundError(w, http.StatusNotImplemented, "REFUND_NOT_SUPPORTED", fmt.Sprintf("provider %q does not support refunds", selectedProvider))
+		writeRefundError(w, http.StatusNotImplemented, dto.ErrorRefundNotSupported, fmt.Sprintf("provider %q does not support refunds", selectedProvider))
 		return
 	}
 
@@ -190,11 +190,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, full bool) {
 	refund.ProviderErrorMsg = result.ErrorMessage
 	refund.UpdatedAt = time.Now().UTC()
 	if refund.Status == string(dto.RefundStatusFail) {
-		refund.ProviderErrorCode = "REFUND_FAILED"
+		refund.ProviderErrorCode = dto.ErrorRefundFailed
 	}
 
 	if err := h.refunds.SaveRefund(r.Context(), refund); err != nil {
-		writeRefundError(w, http.StatusInternalServerError, "REFUND_STORAGE_ERROR", err.Error())
+		writeRefundError(w, http.StatusInternalServerError, dto.ErrorRefundStorage, err.Error())
 		return
 	}
 
@@ -218,27 +218,27 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	merchantID := strings.TrimSpace(r.URL.Query().Get("merchant_id"))
 	refundID := strings.TrimSpace(firstNonEmpty(r.URL.Query().Get("id"), r.URL.Query().Get("refund_id")))
 	if merchantID == "" || refundID == "" {
-		writeRefundError(w, http.StatusBadRequest, "BAD_REQUEST", "merchant_id and id are required")
+		writeRefundError(w, http.StatusBadRequest, dto.ErrorBadRequest, "merchant_id and id are required")
 		return
 	}
 	authMerchant, ok := merchantauth.MerchantFromContext(r.Context())
 	if !ok {
-		writeRefundError(w, http.StatusUnauthorized, "AUTH_CONTEXT_MISSING", "authenticated merchant context is required")
+		writeRefundError(w, http.StatusUnauthorized, dto.ErrorAuthContextMissing, "authenticated merchant context is required")
 		return
 	}
 	if !merchantauth.CanReadMerchantData(authMerchant, merchantID) {
 		merchantauth.LogAuthorizationFailed(r.Context(), h.logger, authMerchant, merchantID, "GET /refunds/status", "refund status access is not allowed for this role or merchant")
-		writeRefundError(w, http.StatusForbidden, "FORBIDDEN", "refund status access is not allowed for this role or merchant")
+		writeRefundError(w, http.StatusForbidden, dto.ErrorForbidden, "refund status access is not allowed for this role or merchant")
 		return
 	}
 
 	refund, found, err := h.refunds.GetRefundByID(r.Context(), merchantID, refundID)
 	if err != nil {
-		writeRefundError(w, http.StatusInternalServerError, "REFUND_STORAGE_ERROR", err.Error())
+		writeRefundError(w, http.StatusInternalServerError, dto.ErrorRefundStorage, err.Error())
 		return
 	}
 	if !found {
-		writeRefundError(w, http.StatusNotFound, "REFUND_NOT_FOUND", "refund not found")
+		writeRefundError(w, http.StatusNotFound, dto.ErrorRefundNotFound, "refund not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, dto.RefundAPIResponse{Data: &refund, Success: refund.Status != string(dto.RefundStatusFail)})
@@ -250,7 +250,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	if merchantID == "" {
 		writeJSON(w, http.StatusBadRequest, dto.RefundSearchResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "BAD_REQUEST", Message: "merchant_id is required"},
+			Error:   dto.NewGatewayError(dto.ErrorBadRequest, "merchant_id is required"),
 		})
 		return
 	}
@@ -258,7 +258,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeJSON(w, http.StatusUnauthorized, dto.RefundSearchResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "AUTH_CONTEXT_MISSING", Message: "authenticated merchant context is required"},
+			Error:   dto.NewGatewayError(dto.ErrorAuthContextMissing, "authenticated merchant context is required"),
 		})
 		return
 	}
@@ -266,7 +266,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		merchantauth.LogAuthorizationFailed(r.Context(), h.logger, authMerchant, merchantID, "GET /refunds/search", "refund search access is not allowed for this role or merchant")
 		writeJSON(w, http.StatusForbidden, dto.RefundSearchResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "FORBIDDEN", Message: "refund search access is not allowed for this role or merchant"},
+			Error:   dto.NewGatewayError(dto.ErrorForbidden, "refund search access is not allowed for this role or merchant"),
 		})
 		return
 	}
@@ -275,7 +275,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, dto.RefundSearchResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "REFUND_STORAGE_ERROR", Message: err.Error()},
+			Error:   dto.NewGatewayError(dto.ErrorRefundStorage, err.Error()),
 		})
 		return
 	}
@@ -404,7 +404,7 @@ func newRefundID() string {
 func writeRefundError(w http.ResponseWriter, status int, code string, message string) {
 	writeJSON(w, status, dto.RefundAPIResponse{
 		Success: false,
-		Error:   &dto.GatewayError{Code: code, Message: message},
+		Error:   dto.NewGatewayError(code, message),
 	})
 }
 

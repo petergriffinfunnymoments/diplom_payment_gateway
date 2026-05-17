@@ -185,6 +185,7 @@ func (a *StripeAdapter) Send(ctx context.Context, token string, req dto.CreatePa
 		return contracts.AdapterResult{
 			PaymentSystem: "STRIPE",
 			Status:        string(dto.StatusFailed),
+			ErrorCode:     dto.ErrorValidation,
 			ErrorMessage:  "amount must be greater than zero for Stripe Checkout",
 		}, nil
 	}
@@ -245,6 +246,7 @@ func (a *StripeAdapter) Send(ctx context.Context, token string, req dto.CreatePa
 			PaymentSystem:  "STRIPE",
 			Status:         string(dto.StatusFailed),
 			ProviderStatus: sResp.Error.Type,
+			ErrorCode:      dto.ErrorProviderUnavailable,
 			ErrorMessage:   msg,
 		}, nil
 	}

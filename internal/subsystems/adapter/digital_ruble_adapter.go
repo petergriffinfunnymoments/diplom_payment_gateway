@@ -53,12 +53,13 @@ func (a *DigitalRubleAdapter) Send(ctx context.Context, token string, req dto.Cr
 	externalID := fmt.Sprintf("drub_%d", time.Now().UnixNano())
 	expiresAt := time.Now().UTC().Add(a.qrTTL)
 
-	status, providerStatus, errMsg := emulateDigitalRubleStatus(walletID)
+	status, providerStatus, errCode, errMsg := emulateDigitalRubleStatus(walletID)
 	return contracts.AdapterResult{
 		ExternalTransactionID: externalID,
 		PaymentSystem:         "DIGITAL_RUBLE",
 		Status:                status,
 		ProviderStatus:        providerStatus,
+		ErrorCode:             errCode,
 		PaymentURL:            "digital-ruble://pay?" + digitalRubleQuery(qrID, req),
 		QRID:                  qrID,
 		QRPayload:             a.qrPayload(qrID, req, walletID),
@@ -129,17 +130,17 @@ func digitalRubleWalletID(req dto.CreatePaymentRequest) string {
 	}
 }
 
-func emulateDigitalRubleStatus(walletID string) (status string, providerStatus string, errMsg string) {
+func emulateDigitalRubleStatus(walletID string) (status string, providerStatus string, errCode string, errMsg string) {
 	switch strings.ToLower(strings.TrimSpace(walletID)) {
 	case "dr_wallet_123":
-		return string(dto.StatusCaptured), "settled", ""
+		return string(dto.StatusCaptured), "settled", "", ""
 	case "dr_wallet_declined":
-		return string(dto.StatusDeclined), "participant_rejected", "digital ruble payment rejected by participant bank emulator"
+		return string(dto.StatusDeclined), "participant_rejected", dto.ErrorDigitalRubleDeclined, "digital ruble payment rejected by participant bank emulator"
 	case "dr_wallet_error":
-		return string(dto.StatusFailed), "technical_error", "digital ruble participant bank emulator returned technical error"
+		return string(dto.StatusFailed), "technical_error", dto.ErrorDigitalRubleTechnical, "digital ruble participant bank emulator returned technical error"
 	case "dr_wallet_pending":
-		return string(dto.StatusPending), "awaiting_customer_confirmation", ""
+		return string(dto.StatusPending), "awaiting_customer_confirmation", "", ""
 	default:
-		return string(dto.StatusPending), "qr_issued", ""
+		return string(dto.StatusPending), "qr_issued", "", ""
 	}
 }

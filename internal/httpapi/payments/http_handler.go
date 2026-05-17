@@ -31,21 +31,21 @@ func NewCreatePaymentHandler(
 	createPaymentEndpoint := endpoint.Endpoint(func(ctx context.Context, request interface{}) (interface{}, error) {
 		req, ok := request.(dto.CreatePaymentRequest)
 		if !ok {
-			return errorResponse{Code: "BAD_REQUEST", Message: "invalid request payload"}, nil
+			return errorResponse{Code: dto.ErrorBadRequest, Message: "invalid request payload"}, nil
 		}
 		authMerchant, ok := merchantauth.MerchantFromContext(ctx)
 		if !ok {
-			return errorResponse{Code: "AUTH_CONTEXT_MISSING", Message: "authenticated merchant context is required"}, nil
+			return errorResponse{Code: dto.ErrorAuthContextMissing, Message: "authenticated merchant context is required"}, nil
 		}
 		if !merchantauth.CanWriteMerchantData(authMerchant, req.MerchantID) {
 			merchantauth.LogAuthorizationFailed(ctx, eventLogger, authMerchant, req.MerchantID, "POST /payments", "payment creation is not allowed for this role or merchant")
-			return errorResponse{Code: "FORBIDDEN", Message: "payment creation is not allowed for this role or merchant"}, nil
+			return errorResponse{Code: dto.ErrorForbidden, Message: "payment creation is not allowed for this role or merchant"}, nil
 		}
 
 		// На старте оркестратор может быть заглушкой — вернём 501 на уровне транспорта.
 		resp, err := orchestrator.CreatePayment(ctx, req)
 		if err != nil {
-			return errorResponse{Code: "NOT_IMPLEMENTED", Message: err.Error()}, err
+			return errorResponse{Code: dto.ErrorNotImplemented, Message: err.Error()}, err
 		}
 		return resp, nil
 	})
@@ -62,11 +62,11 @@ func NewCreatePaymentHandler(
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if errResp, ok := response.(errorResponse); ok {
 			switch errResp.Code {
-			case "BAD_REQUEST":
+			case dto.ErrorBadRequest:
 				w.WriteHeader(http.StatusBadRequest)
-			case "AUTH_CONTEXT_MISSING":
+			case dto.ErrorAuthContextMissing:
 				w.WriteHeader(http.StatusUnauthorized)
-			case "FORBIDDEN":
+			case dto.ErrorForbidden:
 				w.WriteHeader(http.StatusForbidden)
 			}
 		}
@@ -101,7 +101,7 @@ func NewCreatePaymentHandler(
 		// Валидация метода.
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			_ = json.NewEncoder(w).Encode(errorResponse{Code: "METHOD_NOT_ALLOWED", Message: "use POST"})
+			_ = json.NewEncoder(w).Encode(errorResponse{Code: dto.ErrorMethodNotAllowed, Message: "use POST"})
 			return
 		}
 

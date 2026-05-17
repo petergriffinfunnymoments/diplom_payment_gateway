@@ -131,7 +131,7 @@ func (h *StripeWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		msg := stripeDeclineMessage(event.Type, session.Status, session.PaymentStatus)
 		resp.TransactionDetails.ProviderErrorCode = event.Type
 		resp.TransactionDetails.ProviderErrorMessage = msg
-		resp.Error = &dto.GatewayError{Code: "STRIPE_PAYMENT_DECLINED", Message: msg}
+		resp.Error = dto.NewGatewayError(dto.ErrorStripePaymentDeclined, msg)
 	} else {
 		resp.Error = nil
 	}

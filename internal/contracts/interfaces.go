@@ -89,6 +89,7 @@ type AdapterResult struct {
 	PaymentSystem         string
 	Status                string // например: CAPTURED / FAILED / PENDING
 	ProviderStatus        string // исходный статус внешней платежной системы
+	ErrorCode             string // внутренний код ошибки шлюза, если адаптер уже смог его классифицировать
 	PaymentURL            string // ссылка на платежную форму, если провайдер требует подтверждение пользователя
 	QRID                  string
 	QRPayload             string

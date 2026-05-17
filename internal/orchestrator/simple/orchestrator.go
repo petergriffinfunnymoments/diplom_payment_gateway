@@ -196,7 +196,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	// 3) Validator.
 	validatedReq, err := o.validator.Validate(ctx, req)
 	if err != nil {
-		return o.failAndSave(ctx, safeReq, statusFailed, "VALIDATION_ERROR", err.Error(), "validator")
+		return o.failAndSave(ctx, safeReq, statusFailed, dto.ErrorValidation, err.Error(), "validator")
 	}
 	validatedReq = validatedReq.WithoutSensitiveAuthenticationData()
 	_ = o.stateManager.SetStatus(ctx, validatedReq.MerchantID, validatedReq.PaymentID, statusPending)
@@ -205,7 +205,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	// 4) AntiFraud.
 	fraudResult, err := o.antiFraud.Check(ctx, validatedReq)
 	if err != nil {
-		return o.failAndSave(ctx, validatedReq, statusFailed, "ANTIFRAUD_ERROR", err.Error(), "antifraud")
+		return o.failAndSave(ctx, validatedReq, statusFailed, dto.ErrorAntifraud, err.Error(), "antifraud")
 	}
 	_ = o.logEvent(ctx, validatedReq, contracts.EventFraudChecked, contracts.LogLevelInfo, "antifraud", statusPending, "Antifraud check completed", map[string]string{
 		"fraud_result": fraudResult.Result,
@@ -216,19 +216,19 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		if msg == "" {
 			msg = "payment blocked by antifraud"
 		}
-		return o.failAndSave(ctx, validatedReq, statusDeclined, "ANTIFRAUD_DECLINED", msg, "antifraud")
+		return o.failAndSave(ctx, validatedReq, statusDeclined, dto.ErrorAntifraudDeclined, msg, "antifraud")
 	}
 
 	// 5) Router.
 	paymentSystem, adapterKey, err := o.router.Route(ctx, validatedReq, fraudResult)
 	if err != nil {
-		return o.failAndSave(ctx, validatedReq, statusFailed, "ROUTING_ERROR", err.Error(), "orchestrator")
+		return o.failAndSave(ctx, validatedReq, statusFailed, dto.ErrorRouting, err.Error(), "orchestrator")
 	}
 
 	// 6) Tokenization.
 	tok, err := o.tokenizer.Tokenize(ctx, validatedReq)
 	if err != nil {
-		return o.failAndSave(ctx, validatedReq, statusFailed, "TOKENIZATION_ERROR", err.Error(), "tokenizer")
+		return o.failAndSave(ctx, validatedReq, statusFailed, dto.ErrorTokenization, err.Error(), "tokenizer")
 	}
 	_ = o.logEvent(ctx, validatedReq, contracts.EventTokenized, contracts.LogLevelInfo, "tokenizer", statusPending, "Payment data tokenized", map[string]string{
 		"token_preview": paymentlogging.TokenPreview(tok),
@@ -237,7 +237,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	// 7) Adapter + retry.
 	paymentAdapter, selectedProvider, err := o.adapterFactory.Resolve(adapterKey, paymentSystem)
 	if err != nil {
-		return o.failAndSave(ctx, validatedReq, statusFailed, "ADAPTER_FACTORY_ERROR", err.Error(), "adapter")
+		return o.failAndSave(ctx, validatedReq, statusFailed, dto.ErrorAdapterFactory, err.Error(), "adapter")
 	}
 	var lastAdapterResult contracts.AdapterResult
 	retryCount := 0
@@ -257,6 +257,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 				ExternalTransactionID: "",
 				PaymentSystem:         paymentSystem,
 				Status:                statusFailed,
+				ErrorCode:             dto.ErrorProviderUnavailable,
 				ErrorMessage:          err.Error(),
 			}
 		}
@@ -284,7 +285,7 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	// 8) Callback handler: build gateway response.
 	resp, err := o.callback.HandleCallback(ctx, lastAdapterResult, validatedReq, tok)
 	if err != nil {
-		resp = buildErrorResponse(validatedReq, statusFailed, "CALLBACK_ERROR", err.Error())
+		resp = buildErrorResponse(validatedReq, statusFailed, dto.ErrorCallback, err.Error())
 	}
 	resp = resp.Sanitized()
 	resp.TransactionDetails.RetryCount = retryCount
@@ -314,7 +315,7 @@ func (o *SimpleOrchestrator) failAndSave(ctx context.Context, req dto.CreatePaym
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, status)
 
 	resp := buildErrorResponse(req, status, code, msg)
-	if code == "ANTIFRAUD_DECLINED" {
+	if code == dto.ErrorAntifraudDeclined {
 		resp.TransactionDetails.FraudCheckResult = "BLOCKED"
 	} else if service == "antifraud" {
 		resp.TransactionDetails.FraudCheckResult = "ERROR"
@@ -387,9 +388,6 @@ func buildErrorResponse(req dto.CreatePaymentRequest, status string, code string
 			UpdatedAt:         nowUTC(),
 		},
 		TransactionDetails: dto.TransactionDetails{RetryCount: 0},
-		Error: &dto.GatewayError{
-			Code:    code,
-			Message: msg,
-		},
+		Error:              dto.NewGatewayError(code, msg),
 	}.Sanitized()
 }

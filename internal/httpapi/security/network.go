@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"payment-gateway/internal/contracts"
+	"payment-gateway/internal/dto"
 	"payment-gateway/internal/subsystems/merchantauth"
 )
 
@@ -210,7 +211,7 @@ func writeNetworkAccessDenied(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
 	_ = json.NewEncoder(w).Encode(ErrorResponse{
-		Code:    "NETWORK_ACCESS_DENIED",
+		Code:    dto.ErrorNetworkAccessDenied,
 		Message: message,
 	})
 }

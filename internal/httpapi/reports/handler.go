@@ -33,21 +33,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, dto.TransactionReportResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "METHOD_NOT_ALLOWED", Message: "use GET"},
+			Error:   dto.NewGatewayError(dto.ErrorMethodNotAllowed, "use GET"),
 		})
 		return
 	}
 	if r.URL.Path != "/reports/transactions" {
 		writeJSON(w, http.StatusNotFound, dto.TransactionReportResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "NOT_FOUND", Message: "report endpoint not found"},
+			Error:   dto.NewGatewayError(dto.ErrorNotFound, "report endpoint not found"),
 		})
 		return
 	}
 	if h.store == nil {
 		writeJSON(w, http.StatusInternalServerError, dto.TransactionReportResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "REPORT_STORE_UNAVAILABLE", Message: "report store is not configured"},
+			Error:   dto.NewGatewayError(dto.ErrorReportStoreUnavailable, "report store is not configured"),
 		})
 		return
 	}
@@ -56,7 +56,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, dto.TransactionReportResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "BAD_REQUEST", Message: err.Error()},
+			Error:   dto.NewGatewayError(dto.ErrorBadRequest, err.Error()),
 		})
 		return
 	}
@@ -65,7 +65,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeJSON(w, http.StatusUnauthorized, dto.TransactionReportResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "AUTH_CONTEXT_MISSING", Message: "authenticated merchant context is required"},
+			Error:   dto.NewGatewayError(dto.ErrorAuthContextMissing, "authenticated merchant context is required"),
 		})
 		return
 	}
@@ -73,7 +73,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		merchantauth.LogAuthorizationFailed(r.Context(), h.logger, authMerchant, filter.MerchantID, "GET /reports/transactions", "transaction report access is not allowed for this role or merchant")
 		writeJSON(w, http.StatusForbidden, dto.TransactionReportResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "MERCHANT_SCOPE_MISMATCH", Message: "transaction report access is not allowed for this role or merchant"},
+			Error:   dto.NewGatewayError(dto.ErrorMerchantScopeMismatch, "transaction report access is not allowed for this role or merchant"),
 		})
 		return
 	}
@@ -82,7 +82,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, dto.TransactionReportResponse{
 			Success: false,
-			Error:   &dto.GatewayError{Code: "REPORT_STORAGE_ERROR", Message: err.Error()},
+			Error:   dto.NewGatewayError(dto.ErrorReportStorage, err.Error()),
 		})
 		return
 	}

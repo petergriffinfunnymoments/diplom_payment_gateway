@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"payment-gateway/internal/dto"
 )
 
 type TransportConfig struct {
@@ -36,7 +38,7 @@ func Middleware(cfg TransportConfig, next http.Handler) http.Handler {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusUpgradeRequired)
 			_ = json.NewEncoder(w).Encode(ErrorResponse{
-				Code:    "HTTPS_REQUIRED",
+				Code:    dto.ErrorHTTPSRequired,
 				Message: "HTTPS is required for payment gateway requests",
 			})
 			return

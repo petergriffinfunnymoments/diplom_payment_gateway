@@ -130,10 +130,10 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		resp.TransactionDetails.ProviderErrorCode = providerReason
 		resp.TransactionDetails.ProviderErrorMessage = msg
 		resp.TransactionDetails.FraudCheckResult = fraudResultFromYooKassaCancellation(providerReason)
-		resp.Error = &dto.GatewayError{
-			Code:    gatewayErrorCodeFromYooKassaCancellation(providerReason),
-			Message: formatYooKassaDeclineMessage(providerParty, providerReason),
-		}
+		resp.Error = dto.NewGatewayError(
+			gatewayErrorCodeFromYooKassaCancellation(providerReason),
+			formatYooKassaDeclineMessage(providerParty, providerReason),
+		)
 	} else {
 		resp.Error = nil
 	}
@@ -288,17 +288,19 @@ func ctxWithTimeout(parent context.Context) (context.Context, context.CancelFunc
 
 func gatewayErrorCodeFromYooKassaCancellation(reason string) string {
 	reason = strings.ToLower(strings.TrimSpace(reason))
-	if reason == "" {
-		return "YOOKASSA_PAYMENT_DECLINED"
+	switch reason {
+	case "fraud_suspected":
+		return dto.ErrorYooKassaFraudSuspected
+	default:
+		return dto.ErrorYooKassaPaymentDeclined
 	}
-	return "YOOKASSA_" + strings.ToUpper(reason)
 }
 
 func fraudResultFromYooKassaCancellation(reason string) string {
 	if strings.EqualFold(strings.TrimSpace(reason), "fraud_suspected") {
-		return "BLOCKED_BY_PROVIDER_FRAUD"
+		return dto.ErrorBlockedByProviderFraud
 	}
-	return "DECLINED_BY_PROVIDER"
+	return dto.ErrorDeclinedByProvider
 }
 
 func formatYooKassaDeclineMessage(party string, reason string) string {

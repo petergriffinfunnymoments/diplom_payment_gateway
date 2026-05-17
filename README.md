@@ -197,6 +197,85 @@ VOID_FAILED
 VOIDED
 ```
 
+## Справочник внутренних ошибок
+
+Основные статусы платежей не расширяются под каждую причину отказа. Конкретная причина хранится отдельно:
+
+```json
+{
+  "current_status": "DECLINED",
+  "error": {
+    "code": "ANTIFRAUD_DECLINED",
+    "message": "payment blocked by antifraud"
+  },
+  "transaction_details": {
+    "provider_error_code": "fraud_suspected",
+    "provider_error_message": "fraud_suspected"
+  }
+}
+```
+
+Внутренний справочник находится в:
+
+```text
+internal/dto/error_catalog.go
+```
+
+Правило разделения:
+
+```text
+current_status              -> итоговое состояние платежа: DECLINED, FAILED, CAPTURED и т.д.
+error.code                  -> внутренний стабильный код ошибки шлюза
+error.message               -> человекочитаемое описание причины
+provider_error_code         -> сырой код внешнего провайдера, если он есть
+provider_error_message      -> сообщение внешнего провайдера
+```
+
+Основные внутренние коды:
+
+```text
+BAD_REQUEST                 -> некорректный HTTP-запрос или JSON
+AUTHENTICATION_ERROR        -> ошибка merchant authentication
+AUTH_CONTEXT_MISSING        -> отсутствует контекст аутентифицированного мерчанта
+FORBIDDEN                   -> роль или merchant scope не позволяют операцию
+NETWORK_ACCESS_DENIED       -> IP/CIDR источника не разрешён
+HTTPS_REQUIRED              -> запрос отклонён из-за требования HTTPS
+
+VALIDATION_ERROR            -> платёжные данные не прошли валидацию
+ANTIFRAUD_ERROR             -> техническая ошибка антифрода
+ANTIFRAUD_DECLINED          -> антифрод заблокировал платёж
+ROUTING_ERROR               -> маршрутизатор не выбрал провайдера
+TOKENIZATION_ERROR          -> ошибка токенизации
+ADAPTER_FACTORY_ERROR       -> адаптер не зарегистрирован или не настроен
+PROVIDER_UNAVAILABLE        -> внешний провайдер недоступен или вернул сетевую ошибку
+ADAPTER_FAILED              -> адаптер вернул технический сбой
+PAYMENT_DECLINED            -> провайдер отклонил платёж
+CALLBACK_ERROR              -> ошибка формирования PaymentResponse
+
+PAYMENT_NOT_FOUND           -> платёж не найден
+PAYMENT_NOT_CAPTURED        -> операция разрешена только для CAPTURED платежа
+INVALID_STORED_RESPONSE     -> сохранённый PaymentResponse повреждён или не читается
+
+YOOKASSA_PAYMENT_DECLINED   -> YooKassa отклонила или отменила платёж
+YOOKASSA_FRAUD_SUSPECTED    -> YooKassa вернула fraud_suspected
+STRIPE_PAYMENT_DECLINED     -> Stripe Checkout сообщил об отказе/истечении сессии
+DIGITAL_RUBLE_PAYMENT_DECLINED -> эмулятор цифрового рубля отклонил платёж
+DIGITAL_RUBLE_TECHNICAL_ERROR  -> техническая ошибка эмулятора цифрового рубля
+```
+
+Для возвратов и отчётов используются дополнительные коды:
+
+```text
+REFUND_STORE_UNAVAILABLE
+REFUND_STORAGE_ERROR
+REFUND_NOT_SUPPORTED
+REFUND_NOT_FOUND
+REFUND_FAILED
+REPORT_STORE_UNAVAILABLE
+REPORT_STORAGE_ERROR
+MERCHANT_SCOPE_MISMATCH
+```
+
 ### Возвраты
 
 API возвратов сделан в стиле Pally/Paypalich Refund Resource:

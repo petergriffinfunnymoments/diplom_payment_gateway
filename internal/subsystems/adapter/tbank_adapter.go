@@ -152,12 +152,14 @@ func (a *TBankAdapter) Send(ctx context.Context, token string, req dto.CreatePay
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		result.Status = string(dto.StatusFailed)
+		result.ErrorCode = dto.ErrorProviderUnavailable
 		result.ErrorMessage = fmt.Sprintf("tbank returned HTTP %d: %s", resp.StatusCode, firstNonEmpty(tResp.Message, tResp.Details))
 		return result, nil
 	}
 
 	if !tResp.Success {
 		result.Status = string(dto.StatusFailed)
+		result.ErrorCode = dto.ErrorProviderUnavailable
 		result.ErrorMessage = firstNonEmpty(tResp.Message, tResp.Details, "tbank init failed")
 		return result, nil
 	}

@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"payment-gateway/internal/dto"
 )
 
 const (
@@ -241,7 +243,7 @@ func writeAuthError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusUnauthorized)
 	_ = json.NewEncoder(w).Encode(ErrorResponse{
-		Code:    "AUTHENTICATION_ERROR",
+		Code:    dto.ErrorAuthentication,
 		Message: err.Error(),
 	})
 }

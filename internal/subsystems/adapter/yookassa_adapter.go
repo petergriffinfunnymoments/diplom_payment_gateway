@@ -180,6 +180,7 @@ func (a *YooKassaAdapter) Send(ctx context.Context, token string, req dto.Create
 			PaymentSystem:  "YOOKASSA",
 			Status:         string(dto.StatusFailed),
 			ProviderStatus: yResp.Type,
+			ErrorCode:      dto.ErrorProviderUnavailable,
 			ErrorMessage:   msg,
 		}, nil
 	}
@@ -196,8 +197,19 @@ func (a *YooKassaAdapter) Send(ctx context.Context, token string, req dto.Create
 		Status:                status,
 		ProviderStatus:        yResp.Status,
 		PaymentURL:            yResp.Confirmation.ConfirmationURL,
+		ErrorCode:             yookassaAdapterErrorCode(status, yResp.CancellationDetails.Reason),
 		ErrorMessage:          errorMessage,
 	}, nil
+}
+
+func yookassaAdapterErrorCode(status string, reason string) string {
+	if status != string(dto.StatusDeclined) && status != string(dto.StatusFailed) {
+		return ""
+	}
+	if strings.EqualFold(strings.TrimSpace(reason), "fraud_suspected") {
+		return dto.ErrorYooKassaFraudSuspected
+	}
+	return dto.ErrorYooKassaPaymentDeclined
 }
 
 type yookassaPaymentResponse struct {
