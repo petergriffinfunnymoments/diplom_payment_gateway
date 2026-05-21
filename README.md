@@ -187,15 +187,11 @@ GET /payments/{payment_id}?merchant_id=merchant_12345
 ```text
 CREATED
 PENDING
-AUTHORIZED
 CAPTURE_REQUESTED
 CAPTURED
 DECLINED
 CANCELLED
 FAILED
-VOID_REQUESTED
-VOID_FAILED
-VOIDED
 ```
 
 ## Справочник внутренних ошибок
@@ -320,10 +316,9 @@ GET  /refunds/search?merchant_id=merchant_12345&payment_id=pay_...
 Статусы возврата:
 
 ```text
-NEW
-PROCESS
-SUCCESS
-FAIL
+PROCESS_REFUND
+SUCCESS_REFUND
+FAIL_REFUND
 ```
 
 ### Отчеты
@@ -502,7 +497,6 @@ pgroutedisable "merchant_12345" "Банковская карта" yookassa
 ```text
 yookassa
 stripe
-tbank
 digital_ruble
 simulated
 dummy

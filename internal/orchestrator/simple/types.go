@@ -11,7 +11,6 @@ import (
 const (
 	statusCreated          = string(dto.StatusCreated)
 	statusPending          = string(dto.StatusPending)
-	statusAuthorized       = string(dto.StatusAuthorized)
 	statusCaptureRequested = string(dto.StatusCaptureRequested)
 	statusCaptured         = string(dto.StatusCaptured)
 	statusDeclined         = string(dto.StatusDeclined)

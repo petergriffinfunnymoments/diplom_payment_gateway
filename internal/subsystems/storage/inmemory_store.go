@@ -139,6 +139,7 @@ func (s *InMemoryTransactionStore) SaveRefund(ctx context.Context, refund dto.Re
 	if refund.MerchantID == "" || refund.ID == "" {
 		return errors.New("merchantID and refundID are required")
 	}
+	refund.Status = dto.NormalizeRefundStatus(refund.Status)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

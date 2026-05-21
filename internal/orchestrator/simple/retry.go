@@ -24,7 +24,7 @@ func (h *simpleRetryHandler) ShouldRetry(ctx context.Context, adapterResult cont
 	// PENDING — нормальный статус для провайдеров с платежной формой/redirect.
 	// DECLINED/CANCELLED — бизнес-отказ, его не нужно автоматически повторять.
 	switch adapterResult.Status {
-	case statusCaptured, statusPending, statusAuthorized, statusCaptureRequested, statusDeclined, statusCancelled:
+	case statusCaptured, statusPending, statusCaptureRequested, statusDeclined, statusCancelled:
 		return false
 	default:
 		return true

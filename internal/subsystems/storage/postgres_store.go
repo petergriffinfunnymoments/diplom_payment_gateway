@@ -178,6 +178,7 @@ func (s *PostgresTransactionStore) SaveRefund(ctx context.Context, refund dto.Re
 	if refund.MerchantID == "" || refund.ID == "" || refund.PaymentID == "" || refund.IdempotencyKey == "" {
 		return errors.New("merchantID, refundID, paymentID and idempotencyKey are required")
 	}
+	refund.Status = dto.NormalizeRefundStatus(refund.Status)
 
 	_, err := s.pool.Exec(ctx, `
 INSERT INTO payment_refunds (
@@ -348,8 +349,12 @@ func scanRefund(row refundScanner) (dto.Refund, error) {
 		&refund.CreatedAt,
 		&refund.UpdatedAt,
 	)
+	if err != nil {
+		return refund, err
+	}
 	refund.Currency = dto.PaymentCurrency(currency)
-	return refund, err
+	refund.Status = dto.NormalizeRefundStatus(refund.Status)
+	return refund, nil
 }
 func (s *PostgresTransactionStore) GetByPaymentID(
 	ctx context.Context,

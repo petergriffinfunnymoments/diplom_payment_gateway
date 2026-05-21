@@ -27,10 +27,6 @@ func NewFactoryFromEnv() *Factory {
 		f.Register("yookassa", a)
 	}
 
-	if a, err := NewTBankAdapterFromEnv(); err == nil {
-		f.Register("tbank", a)
-	}
-
 	if a, err := NewStripeAdapterFromEnv(); err == nil {
 		f.Register("stripe", a)
 	}

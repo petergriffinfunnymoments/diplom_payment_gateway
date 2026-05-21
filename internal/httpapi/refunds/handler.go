@@ -183,7 +183,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, full bool) {
 		}
 	}
 
-	refund.Status = normalizeRefundStatus(result.Status)
+	refund.Status = dto.NormalizeRefundStatus(result.Status)
 	refund.PaymentSystem = firstNonEmpty(result.PaymentSystem, refund.PaymentSystem)
 	refund.ExternalRefundID = result.ExternalRefundID
 	refund.ProviderStatus = result.ProviderStatus
@@ -375,21 +375,6 @@ func providerKey(paymentSystem string) string {
 		return "digital_ruble"
 	default:
 		return strings.ToLower(strings.TrimSpace(paymentSystem))
-	}
-}
-
-func normalizeRefundStatus(status string) string {
-	switch strings.ToUpper(strings.TrimSpace(status)) {
-	case string(dto.RefundStatusNew):
-		return string(dto.RefundStatusNew)
-	case string(dto.RefundStatusProcess):
-		return string(dto.RefundStatusProcess)
-	case string(dto.RefundStatusSuccess):
-		return string(dto.RefundStatusSuccess)
-	case string(dto.RefundStatusFail):
-		return string(dto.RefundStatusFail)
-	default:
-		return string(dto.RefundStatusProcess)
 	}
 }
 

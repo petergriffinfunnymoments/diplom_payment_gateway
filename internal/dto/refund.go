@@ -1,15 +1,30 @@
 package dto
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type RefundStatus string
 
 const (
-	RefundStatusNew     RefundStatus = "NEW"
-	RefundStatusProcess RefundStatus = "PROCESS"
-	RefundStatusSuccess RefundStatus = "SUCCESS"
-	RefundStatusFail    RefundStatus = "FAIL"
+	RefundStatusProcess RefundStatus = "PROCESS_REFUND"
+	RefundStatusSuccess RefundStatus = "SUCCESS_REFUND"
+	RefundStatusFail    RefundStatus = "FAIL_REFUND"
 )
+
+func NormalizeRefundStatus(status string) string {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case string(RefundStatusProcess), "PROCESS", "PROCESSING", "PENDING":
+		return string(RefundStatusProcess)
+	case string(RefundStatusSuccess), "SUCCESS", "SUCCEEDED", "SUCCEEDED_REFUND":
+		return string(RefundStatusSuccess)
+	case string(RefundStatusFail), "FAIL", "FAILED", "CANCELED", "CANCELLED":
+		return string(RefundStatusFail)
+	default:
+		return string(RefundStatusProcess)
+	}
+}
 
 type Refund struct {
 	ID                string          `json:"id"`

@@ -230,9 +230,9 @@ func addTransactionToSummary(summary *dto.TransactionReportSummary, item dto.Tra
 	case string(dto.StatusCaptured):
 		summary.CapturedCount++
 		summary.CapturedAmount += amount
-	case string(dto.StatusPending), string(dto.StatusAuthorized), string(dto.StatusCaptureRequested):
+	case string(dto.StatusPending), string(dto.StatusCaptureRequested):
 		summary.PendingCount++
-	case string(dto.StatusDeclined), string(dto.StatusCancelled), string(dto.StatusVoided):
+	case string(dto.StatusDeclined), string(dto.StatusCancelled):
 		summary.DeclinedCount++
 	case string(dto.StatusFailed):
 		summary.FailedCount++
