@@ -367,6 +367,8 @@ func providerKey(paymentSystem string) string {
 		return "yookassa"
 	case "STRIPE":
 		return "stripe"
+	case "ROBOKASSA":
+		return "robokassa"
 	case "SIMULATED":
 		return "simulated"
 	case "DUMMY":

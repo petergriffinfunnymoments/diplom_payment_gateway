@@ -27,3 +27,13 @@
 # $env:MERCHANT_ALLOWED_CIDRS="203.0.113.10/32"
 # $env:ADMIN_ALLOWED_CIDRS="198.51.100.0/24"
 # $env:WEBHOOK_ALLOWED_CIDRS="203.0.113.0/24"
+
+# Optional Robokassa test integration.
+# Configure these after creating a Robokassa shop and test passwords.
+# $env:ROBOKASSA_MERCHANT_LOGIN="<shop-merchant-login>"
+# $env:ROBOKASSA_TEST_PASSWORD1="<test-password-1>"
+# $env:ROBOKASSA_TEST_PASSWORD2="<test-password-2>"
+# $env:ROBOKASSA_TEST_MODE="true"
+# $env:ROBOKASSA_HASH_ALGORITHM="md5"
+# Result URL in Robokassa technical settings:
+# https://<public-url>/webhooks/robokassa

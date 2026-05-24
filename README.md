@@ -37,7 +37,7 @@ POST /payments
 Финальный статус может обновляться webhook-ом от внешнего провайдера:
 
 ```text
-provider webhook -> /webhooks/yookassa, /webhooks/stripe или /webhooks/digital-ruble -> DB -> merchant notification
+provider webhook -> /webhooks/yookassa, /webhooks/stripe, /webhooks/robokassa или /webhooks/digital-ruble -> DB -> merchant notification
 ```
 
 ## Быстрый запуск
@@ -85,6 +85,12 @@ $env:YOOKASSA_SECRET_KEY="..."
 
 $env:STRIPE_SECRET_KEY="..."
 $env:STRIPE_WEBHOOK_SECRET="..."
+
+$env:ROBOKASSA_MERCHANT_LOGIN="..."
+$env:ROBOKASSA_TEST_PASSWORD1="..."
+$env:ROBOKASSA_TEST_PASSWORD2="..."
+$env:ROBOKASSA_TEST_MODE="true"
+$env:ROBOKASSA_HASH_ALGORITHM="md5"
 ```
 
 ## Postman
@@ -345,6 +351,7 @@ limit
 ```text
 POST /webhooks/yookassa
 POST /webhooks/stripe
+POST /webhooks/robokassa
 POST /webhooks/digital-ruble
 POST /sandbox/digital-ruble/scan
 POST /merchant/webhook
@@ -473,6 +480,7 @@ Mastercard 2221-2720 -> stripe
 ```powershell
 . .\payment_gateway_tools\payment-route-tools.ps1
 pgrouteadd "merchant_12345" "Цифровой рубль" digital_ruble 1 DIGITAL_RUBLE
+pgrouteadd "merchant_12345" "СБП" robokassa 1 ROBOKASSA
 ```
 
 Посмотреть маршруты:
@@ -497,6 +505,7 @@ pgroutedisable "merchant_12345" "Банковская карта" yookassa
 ```text
 yookassa
 stripe
+robokassa
 digital_ruble
 simulated
 dummy
@@ -508,7 +517,37 @@ YooKassa создает redirect-платеж и возвращает `payment_u
 
 Stripe создает Checkout Session и возвращает `payment_url`; финальный статус обновляется через `/webhooks/stripe`.
 
+Robokassa создает ссылку на платежную форму и возвращает `payment_url`; при тестовом режиме в ссылку добавляется `IsTest=1`. Финальный статус успешного платежа обновляется через `Result URL` `/webhooks/robokassa`.
+
 Digital Ruble является эмуляционным адаптером банка-участника, потому что реальная платформа цифрового рубля не предоставляет публичный sandbox API для произвольного подключения.
+
+### Robokassa test mode
+
+В кабинете Robokassa в технических настройках магазина задай отдельные тестовые пароли и Result URL:
+
+```text
+Result URL: https://<public-url>/webhooks/robokassa
+Метод Result URL: POST
+Алгоритм подписи: MD5
+```
+
+Локальные переменные:
+
+```powershell
+$env:ROBOKASSA_MERCHANT_LOGIN="..."
+$env:ROBOKASSA_TEST_PASSWORD1="..."
+$env:ROBOKASSA_TEST_PASSWORD2="..."
+$env:ROBOKASSA_TEST_MODE="true"
+$env:ROBOKASSA_HASH_ALGORITHM="md5"
+```
+
+Для тестового платежа через маршрутизатор удобно направить СБП в Robokassa:
+
+```powershell
+pgrouteadd "merchant_12345" "СБП" robokassa 1 ROBOKASSA
+```
+
+Тестовые платежи Robokassa могут не отображаться в поиске операций личного кабинета; проверяй результат по webhook-у, логам и `GET /payments/{payment_id}`.
 
 ## Цифровой рубль
 
@@ -871,6 +910,7 @@ PAYMENT_RETURN_URL
 MERCHANT_WEBHOOK_URL
 YooKassa webhook URL: /webhooks/yookassa
 Stripe webhook URL: /webhooks/stripe
+Robokassa Result URL: /webhooks/robokassa
 Postman base_url
 ```
 
@@ -930,6 +970,42 @@ govulncheck ./...
 tracked file secret scan
 ```
 
+## Performance benchmarks
+
+Производительность проверяется Go benchmark-тестами. Они не запускаются при обычном `go test ./...`, а выполняются отдельной командой:
+
+```powershell
+go test ./... -run "^$" -bench . -benchmem
+```
+
+Удобный запуск через PowerShell:
+
+```powershell
+.\payment_gateway_tools\performance-test.ps1
+```
+
+Запустить только benchmark-и оркестратора:
+
+```powershell
+.\payment_gateway_tools\performance-test.ps1 -Package ./internal/orchestrator/simple
+```
+
+Запустить конкретный benchmark:
+
+```powershell
+.\payment_gateway_tools\performance-test.ps1 -Benchmark BenchmarkCreatePaymentFullFlowSimulated
+```
+
+Сейчас benchmark-и покрывают:
+
+```text
+orchestrator full payment flow через in-memory store и simulated adapter;
+idempotency hit для повторного платежного запроса;
+валидацию банковской карты и цифрового рубля;
+rule-based antifraud;
+построение отчета по 1000 in-memory транзакций.
+```
+
 GitHub Actions workflow:
 
 ```text
@@ -964,6 +1040,7 @@ pgctx pay_...
 pgroutes
 pgmerchant_routes merchant_12345
 pgrouteadd "merchant_12345" "Цифровой рубль" digital_ruble 1 DIGITAL_RUBLE
+pgrouteadd "merchant_12345" "СБП" robokassa 1 ROBOKASSA
 pgroutedisable "merchant_12345" "Банковская карта" yookassa
 ```
 

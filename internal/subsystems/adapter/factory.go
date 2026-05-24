@@ -31,6 +31,10 @@ func NewFactoryFromEnv() *Factory {
 		f.Register("stripe", a)
 	}
 
+	if a, err := NewRobokassaAdapterFromEnv(); err == nil {
+		f.Register("robokassa", a)
+	}
+
 	return f
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -71,10 +72,17 @@ CREATE INDEX IF NOT EXISTS idx_merchants_active
 }
 
 func (s *PostgresMerchantStore) seedDefaultMerchant(ctx context.Context) error {
-	merchantID := getenv("MERCHANT_ID", "merchant_12345")
+	merchantID, hasMerchantID := lookupEnvTrimmed("MERCHANT_ID")
+	apiKey, hasAPIKey := lookupEnvTrimmed("MERCHANT_API_KEY")
+	secretKey, hasSecretKey := lookupEnvTrimmed("MERCHANT_SECRET_KEY")
+	if !hasMerchantID && !hasAPIKey && !hasSecretKey {
+		return nil
+	}
+	if !hasMerchantID || !hasAPIKey || !hasSecretKey {
+		return errors.New("MERCHANT_ID, MERCHANT_API_KEY and MERCHANT_SECRET_KEY must be set together")
+	}
+
 	merchantName := getenv("MERCHANT_NAME", "Демонстрационный интернет-магазин")
-	apiKey := getenv("MERCHANT_API_KEY", "demo_api_key")
-	secretKey := getenv("MERCHANT_SECRET_KEY", "demo_secret_key")
 	role := NormalizeRole(MerchantRole(getenv("MERCHANT_ROLE", string(RoleMerchant))))
 	if role == "" {
 		return errors.New("MERCHANT_ROLE must be one of: merchant, admin, auditor")
@@ -134,4 +142,10 @@ func getenv(key string, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func lookupEnvTrimmed(key string) (string, bool) {
+	v, ok := os.LookupEnv(key)
+	v = strings.TrimSpace(v)
+	return v, ok && v != ""
 }

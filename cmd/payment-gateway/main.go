@@ -195,6 +195,7 @@ func main() {
 	mux.Handle("/reports/transactions", authenticated(reports.NewTransactionReportHandlerWithLogger(reportStore, eventLogger)))
 	mux.Handle("/webhooks/yookassa", providerWebhook(webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService)))
 	mux.Handle("/webhooks/stripe", providerWebhook(webhooks.NewStripeWebhookHandler(store, eventLogger, notificationService)))
+	mux.Handle("/webhooks/robokassa", providerWebhook(webhooks.NewRobokassaWebhookHandler(store, eventLogger, notificationService)))
 	digitalRubleSandboxHandler := providerWebhook(webhooks.NewDigitalRubleSandboxHandler(store, eventLogger, notificationService))
 	mux.Handle("/sandbox/digital-ruble/scan", digitalRubleSandboxHandler)
 	mux.Handle("/webhooks/digital-ruble", digitalRubleSandboxHandler)
