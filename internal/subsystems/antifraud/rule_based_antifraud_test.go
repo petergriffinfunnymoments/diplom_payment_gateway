@@ -73,6 +73,22 @@ func TestIdempotentVelocityDoesNotDoubleCount(t *testing.T) {
 	}
 }
 
+func TestOPAPolicyBlocksDeniedEmail(t *testing.T) {
+	af := NewRuleBasedAntiFraud()
+
+	res, err := af.Check(context.Background(), testPaymentRequest("pay_opa_", 1, "4111111111111111", "opa.blocked@example.com", "+79991234567", ""))
+	if err != nil {
+		t.Fatalf("check failed: %v", err)
+	}
+
+	if res.Result != ResultBlocked {
+		t.Fatalf("expected %s, got %s (%s)", ResultBlocked, res.Result, res.Reason)
+	}
+	if !strings.Contains(res.Reason, "OPA policy blocked payment") {
+		t.Fatalf("expected OPA policy reason, got %q", res.Reason)
+	}
+}
+
 func testPaymentRequest(prefix string, idx int, card string, email string, phone string, wallet string) dto.CreatePaymentRequest {
 	return dto.CreatePaymentRequest{
 		MerchantID:     "merchant_12345",

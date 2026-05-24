@@ -28,6 +28,7 @@ type RuleBasedAntiFraud struct {
 	reviewAmountLimit float64
 	blockAmountLimit  float64
 	velocity          *velocityStore
+	opaPolicy         *opaAntiFraudPolicy
 }
 
 type fraudRuleResult struct {
@@ -38,10 +39,12 @@ type fraudRuleResult struct {
 }
 
 func NewRuleBasedAntiFraud() contracts.AntiFraud {
+	opaPolicy, _ := newOPAAntiFraudPolicy(context.Background())
 	return &RuleBasedAntiFraud{
 		reviewAmountLimit: defaultReviewAmountLimit,
 		blockAmountLimit:  defaultBlockAmountLimit,
 		velocity:          newVelocityStore(),
+		opaPolicy:         opaPolicy,
 	}
 }
 
@@ -57,7 +60,13 @@ func (a *RuleBasedAntiFraud) Check(ctx context.Context, req dto.CreatePaymentReq
 	}
 
 	velocity := a.velocity.recordAndCount(req, time.Now().UTC())
+	opaResult, err := a.checkOPA(ctx, req)
+	if err != nil {
+		return contracts.AntiFraudResult{}, err
+	}
+
 	ruleResults := []fraudRuleResult{
+		opaResult,
 		a.checkAmount(req),
 		a.checkCard(req),
 		a.checkDigitalWallet(req),
