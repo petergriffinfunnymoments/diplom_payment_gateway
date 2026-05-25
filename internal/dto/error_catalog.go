@@ -35,7 +35,6 @@ const (
 	ErrorWebhookPayloadInvalid   = "WEBHOOK_PAYLOAD_INVALID"
 	ErrorYooKassaPaymentDeclined = "YOOKASSA_PAYMENT_DECLINED"
 	ErrorYooKassaFraudSuspected  = "YOOKASSA_FRAUD_SUSPECTED"
-	ErrorStripePaymentDeclined   = "STRIPE_PAYMENT_DECLINED"
 	ErrorDigitalRubleDeclined    = "DIGITAL_RUBLE_PAYMENT_DECLINED"
 	ErrorDigitalRubleTechnical   = "DIGITAL_RUBLE_TECHNICAL_ERROR"
 	ErrorDigitalRubleQRExpired   = "DIGITAL_RUBLE_QR_EXPIRED"
@@ -95,7 +94,6 @@ var gatewayErrorCatalog = []GatewayErrorDefinition{
 	{Code: ErrorWebhookPayloadInvalid, Category: "webhook", DefaultMessage: "webhook payload is invalid", Description: "Webhook внешней платёжной системы имеет некорректное тело."},
 	{Code: ErrorYooKassaPaymentDeclined, Category: "provider", PaymentStatus: string(StatusDeclined), DefaultMessage: "YooKassa payment was declined", Description: "YooKassa отменила или отклонила платёж."},
 	{Code: ErrorYooKassaFraudSuspected, Category: "provider", PaymentStatus: string(StatusDeclined), DefaultMessage: "YooKassa declined payment because fraud was suspected", Description: "YooKassa вернула cancellation_reason=fraud_suspected."},
-	{Code: ErrorStripePaymentDeclined, Category: "provider", PaymentStatus: string(StatusDeclined), DefaultMessage: "Stripe payment was declined", Description: "Stripe Checkout сообщил об отказе или истечении сессии."},
 	{Code: ErrorDigitalRubleDeclined, Category: "provider", PaymentStatus: string(StatusDeclined), DefaultMessage: "digital ruble payment was declined", Description: "Эмулятор цифрового рубля отклонил платёж."},
 	{Code: ErrorDigitalRubleTechnical, Category: "provider", PaymentStatus: string(StatusFailed), Retryable: true, DefaultMessage: "digital ruble technical error", Description: "Эмулятор цифрового рубля вернул техническую ошибку."},
 	{Code: ErrorDigitalRubleQRExpired, Category: "provider", PaymentStatus: string(StatusCancelled), DefaultMessage: "digital ruble QR code expired", Description: "QR-код цифрового рубля истёк до подтверждения оплаты."},

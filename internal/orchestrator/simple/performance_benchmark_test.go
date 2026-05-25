@@ -21,6 +21,8 @@ func (a benchmarkPassedAntiFraud) Check(ctx context.Context, req dto.CreatePayme
 }
 
 func BenchmarkCreatePaymentFullFlowSimulated(b *testing.B) {
+	b.Setenv("SBP_PAYMENT_PROVIDER", "simulated")
+
 	ctx := context.Background()
 	store := storage.NewInMemoryTransactionStore()
 	factory := adapter.NewFactory()
@@ -43,6 +45,8 @@ func BenchmarkCreatePaymentFullFlowSimulated(b *testing.B) {
 }
 
 func BenchmarkCreatePaymentIdempotencyHit(b *testing.B) {
+	b.Setenv("SBP_PAYMENT_PROVIDER", "simulated")
+
 	ctx := context.Background()
 	store := storage.NewInMemoryTransactionStore()
 	factory := adapter.NewFactory()

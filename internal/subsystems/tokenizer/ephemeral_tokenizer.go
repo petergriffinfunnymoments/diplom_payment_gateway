@@ -15,13 +15,6 @@ func NewEphemeralTokenizer() contracts.Tokenizer {
 	return &EphemeralTokenizer{}
 }
 
-// NewDummyTokenizer оставлен для совместимости со старым кодом.
-//
-// Deprecated: use NewEphemeralTokenizer.
-func NewDummyTokenizer() contracts.Tokenizer {
-	return NewEphemeralTokenizer()
-}
-
 func (t *EphemeralTokenizer) Tokenize(ctx context.Context, req dto.CreatePaymentRequest) (string, error) {
 	_ = ctx
 	_ = req

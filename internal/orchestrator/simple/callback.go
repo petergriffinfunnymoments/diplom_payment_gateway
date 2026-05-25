@@ -66,6 +66,7 @@ func (c *simpleCallbackHandler) HandleCallback(
 			Amount:            req.PaymentInfo.Amount,
 			PaymentMethodData: req.PaymentInfo.PaymentMethodData,
 			CustomerData:      req.PaymentInfo.CustomerData.Sanitized(),
+			Items:             req.PaymentInfo.Items,
 			Description:       req.PaymentInfo.Description,
 			CreatedAt:         req.PaymentInfo.CreatedAt,
 			UpdatedAt:         nowUTC(),

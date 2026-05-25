@@ -37,7 +37,7 @@ POST /payments
 Финальный статус может обновляться webhook-ом от внешнего провайдера:
 
 ```text
-provider webhook -> /webhooks/yookassa, /webhooks/stripe, /webhooks/robokassa или /webhooks/digital-ruble -> DB -> merchant notification
+provider webhook -> /webhooks/yookassa, /webhooks/robokassa, /webhooks/payanyway или /webhooks/digital-ruble -> DB -> merchant notification
 ```
 
 ## Быстрый запуск
@@ -82,9 +82,6 @@ $env:MERCHANT_WEBHOOK_SECRET="demo_secret"
 ```powershell
 $env:YOOKASSA_SHOP_ID="..."
 $env:YOOKASSA_SECRET_KEY="..."
-
-$env:STRIPE_SECRET_KEY="..."
-$env:STRIPE_WEBHOOK_SECRET="..."
 
 $env:ROBOKASSA_MERCHANT_LOGIN="..."
 $env:ROBOKASSA_TEST_PASSWORD1="..."
@@ -261,7 +258,6 @@ INVALID_STORED_RESPONSE     -> сохранённый PaymentResponse повре
 
 YOOKASSA_PAYMENT_DECLINED   -> YooKassa отклонила или отменила платёж
 YOOKASSA_FRAUD_SUSPECTED    -> YooKassa вернула fraud_suspected
-STRIPE_PAYMENT_DECLINED     -> Stripe Checkout сообщил об отказе/истечении сессии
 DIGITAL_RUBLE_PAYMENT_DECLINED -> эмулятор цифрового рубля отклонил платёж
 DIGITAL_RUBLE_TECHNICAL_ERROR  -> техническая ошибка эмулятора цифрового рубля
 DIGITAL_RUBLE_QR_EXPIRED       -> QR-код цифрового рубля истёк до подтверждения
@@ -350,8 +346,8 @@ limit
 
 ```text
 POST /webhooks/yookassa
-POST /webhooks/stripe
 POST /webhooks/robokassa
+POST /webhooks/payanyway
 POST /webhooks/digital-ruble
 POST /sandbox/digital-ruble/scan
 POST /merchant/webhook
@@ -468,12 +464,9 @@ pgmerchantrole admin_1 admin
 
 ```text
 МИР 2200-2204       -> yookassa
-Visa 4             -> stripe
-Mastercard 51-55   -> stripe
-Mastercard 2221-2720 -> stripe
 ```
 
-Если схему карты определить нельзя, router смотрит таблицу `merchant_payment_routes`. Если правила нет, используется fallback через переменные окружения или `dummy`.
+Для остальных карт router смотрит таблицу `merchant_payment_routes`. Если правила нет, provider должен быть задан через переменные окружения (`CARD_PAYMENT_PROVIDER`, `SBP_PAYMENT_PROVIDER`, `PAYMENT_PROVIDER`) или запрос завершится ошибкой конфигурации.
 
 Добавить маршрут:
 
@@ -504,20 +497,19 @@ pgroutedisable "merchant_12345" "Банковская карта" yookassa
 
 ```text
 yookassa
-stripe
 robokassa
+payanyway
 digital_ruble
 simulated
-dummy
 ```
 
-`dummy` является совместимым alias для локального эмуляционного адаптера.
+`simulated` используется только для локальных проверок и benchmark-тестов.
 
 YooKassa создает redirect-платеж и возвращает `payment_url`; финальный статус обновляется через `/webhooks/yookassa`.
 
-Stripe создает Checkout Session и возвращает `payment_url`; финальный статус обновляется через `/webhooks/stripe`.
-
 Robokassa создает ссылку на платежную форму и возвращает `payment_url`; при тестовом режиме в ссылку добавляется `IsTest=1`. Финальный статус успешного платежа обновляется через `Result URL` `/webhooks/robokassa`.
+
+PayAnyWay создает ссылку на платежную форму MONETA.Assistant и возвращает `payment_url`; при тестовом режиме в ссылку добавляется `MNT_TEST_MODE=1`. Финальный статус успешного платежа обновляется через `Pay URL` `/webhooks/payanyway`.
 
 Digital Ruble является эмуляционным адаптером банка-участника, потому что реальная платформа цифрового рубля не предоставляет публичный sandbox API для произвольного подключения.
 
@@ -548,6 +540,60 @@ pgrouteadd "merchant_12345" "СБП" robokassa 1 ROBOKASSA
 ```
 
 Тестовые платежи Robokassa могут не отображаться в поиске операций личного кабинета; проверяй результат по webhook-у, логам и `GET /payments/{payment_id}`.
+
+### PayAnyWay test mode
+
+В настройках PayAnyWay/MONETA укажи бизнес-счет и код проверки целостности данных. Если доступно поле Pay URL / URL уведомления об оплате, задай:
+
+```text
+Pay URL: https://<public-url>/webhooks/payanyway
+Метод: POST
+```
+
+Локальные переменные:
+
+```powershell
+$env:PAYANYWAY_MNT_ID="..."
+$env:PAYANYWAY_INTEGRITY_CODE="..."
+$env:PAYANYWAY_TEST_MODE="true"
+$env:PAYANYWAY_PAYMENT_URL="https://www.payanyway.ru/assistant.htm"
+```
+
+Для автоматической регистрации дохода самозанятого PayAnyWay должен получить номенклатуру заказа. В `POST /payments` можно передать позиции в `payment_info.items`; если позиции не переданы, webhook сформирует одну позицию из описания и суммы платежа.
+
+```json
+"items": [
+  {
+    "name": "Тестовая услуга интернет-магазина",
+    "price": 1500,
+    "quantity": 1,
+    "vat_tag": "1105",
+    "payment_method": "full_payment",
+    "payment_object": "service",
+    "id_internal": "service_1"
+  }
+]
+```
+
+Если PayAnyWay требует систему налогообложения, ее можно передать в XML-ответе через переменную:
+
+```powershell
+$env:PAYANYWAY_SNO="..."
+```
+
+По умолчанию для СБП адаптер добавляет `paymentSystem.unitId=sbpc2b`, для карты - `paymentSystem.unitId=card`. Значение можно переопределить:
+
+```powershell
+$env:PAYANYWAY_PAYMENT_UNIT_ID="sbpc2b"
+```
+
+Для тестового платежа через маршрутизатор можно направить СБП в PayAnyWay:
+
+```powershell
+pgrouteadd "merchant_12345" "СБП" payanyway 0 PAYANYWAY
+```
+
+После успешной тестовой оплаты PayAnyWay отправляет уведомление на `/webhooks/payanyway`; шлюз проверяет `MNT_SIGNATURE`, обновляет платеж до `CAPTURED` и отвечает XML-документом `MNT_RESPONSE` с `MNT_RESULT_CODE=200`, `MNT_SIGNATURE` и атрибутами `INVENTORY`/`CLIENT`.
 
 ## Цифровой рубль
 
@@ -882,7 +928,7 @@ $env:WEBHOOK_ALLOWED_CIDRS="203.0.113.0/24"
 TRUSTED_PROXY_CIDRS   -> от каких proxy можно принимать X-Forwarded-For/X-Real-IP/Forwarded
 MERCHANT_ALLOWED_CIDRS -> откуда обычные merchant-ключи могут создавать платежи и возвраты
 ADMIN_ALLOWED_CIDRS   -> откуда admin/auditor могут читать или управлять данными
-WEBHOOK_ALLOWED_CIDRS -> откуда принимаются webhook-и YooKassa/Stripe
+WEBHOOK_ALLOWED_CIDRS -> откуда принимаются webhook-и внешних платежных систем
 ```
 
 Если allowlist-переменная пустая, соответствующий класс запросов не ограничивается по IP. Это оставлено для локальной разработки и Postman. В production лучше задавать allowlist-и явно.
@@ -909,8 +955,8 @@ PUBLIC_URL в run.local.ps1
 PAYMENT_RETURN_URL
 MERCHANT_WEBHOOK_URL
 YooKassa webhook URL: /webhooks/yookassa
-Stripe webhook URL: /webhooks/stripe
 Robokassa Result URL: /webhooks/robokassa
+PayAnyWay Pay URL: /webhooks/payanyway
 Postman base_url
 ```
 
@@ -940,6 +986,63 @@ backend всё ещё принимает PAN/CVV во входном JSON для
 нужны external ASV scans, penetration testing, IDS/FIM, SIEM и организационные процессы;
 старые записи БД, созданные до маскирования, нужно очищать отдельной миграцией.
 ```
+
+## Test commands
+
+Для третьей главы диплома тесты разделены на четыре отдельные категории. Каждая категория запускается своей командой из корня проекта.
+
+### Unit tests
+
+Модульные тесты проверяют отдельные подсистемы без запуска всего платежного шлюза:
+
+```powershell
+.\payment_gateway_tools\test-unit.ps1
+```
+
+Покрываются DTO, валидатор, антифрод, адаптеры, логирование, merchant auth и Vault/secrets.
+
+### Component integration tests
+
+Компонентные интеграционные тесты проверяют взаимодействие нескольких модулей внутри приложения:
+
+```powershell
+.\payment_gateway_tools\test-integration.ps1
+```
+
+Покрываются orchestrator, webhook-и, отчеты и in-memory хранилище. Эти тесты используют тестовые заглушки и не требуют реальных YooKassa, Robokassa, PayAnyWay или PostgreSQL.
+
+### Security tests
+
+Тесты безопасности запускают security-focused Go-тесты, статический анализ, проверку зависимостей и поиск секретов в tracked-файлах:
+
+```powershell
+.\payment_gateway_tools\test-security.ps1 -InstallMissingTools -RequireGovulncheck
+```
+
+Проверяются:
+
+```text
+security-focused go tests;
+go vet ./...;
+govulncheck ./...;
+tracked file secret scan.
+```
+
+### Performance tests
+
+Производительность проверяется Go benchmark-тестами:
+
+```powershell
+.\payment_gateway_tools\test-performance.ps1
+```
+
+Для быстрого локального запуска можно уменьшить время измерения:
+
+```powershell
+.\payment_gateway_tools\test-performance.ps1 -Benchtime 1s -Count 1
+```
+
+Benchmark-и покрывают orchestrator, idempotency hit, валидатор, антифрод и построение отчетов.
 
 ## Security checks
 
@@ -981,19 +1084,19 @@ go test ./... -run "^$" -bench . -benchmem
 Удобный запуск через PowerShell:
 
 ```powershell
-.\payment_gateway_tools\performance-test.ps1
+.\payment_gateway_tools\test-performance.ps1
 ```
 
 Запустить только benchmark-и оркестратора:
 
 ```powershell
-.\payment_gateway_tools\performance-test.ps1 -Package ./internal/orchestrator/simple
+.\payment_gateway_tools\test-performance.ps1 -Package ./internal/orchestrator/simple
 ```
 
 Запустить конкретный benchmark:
 
 ```powershell
-.\payment_gateway_tools\performance-test.ps1 -Benchmark BenchmarkCreatePaymentFullFlowSimulated
+.\payment_gateway_tools\test-performance.ps1 -Benchmark BenchmarkCreatePaymentFullFlowSimulated
 ```
 
 Сейчас benchmark-и покрывают:
@@ -1041,6 +1144,7 @@ pgroutes
 pgmerchant_routes merchant_12345
 pgrouteadd "merchant_12345" "Цифровой рубль" digital_ruble 1 DIGITAL_RUBLE
 pgrouteadd "merchant_12345" "СБП" robokassa 1 ROBOKASSA
+pgrouteadd "merchant_12345" "СБП" payanyway 0 PAYANYWAY
 pgroutedisable "merchant_12345" "Банковская карта" yookassa
 ```
 
@@ -1055,12 +1159,6 @@ pgmerchantenable merchant_12345
 
 ## Типовые проблемы
 
-Если Stripe выбран маршрутизатором, но `STRIPE_SECRET_KEY` не задан:
-
-```text
-adapter provider "stripe" is not registered or not configured
-```
-
 Если webhook-и мерчанту не доставляются, проверь:
 
 ```powershell
@@ -1073,19 +1171,13 @@ echo $env:MERCHANT_WEBHOOK_URL
 https://<public-url>/webhooks/yookassa
 ```
 
-Если Stripe webhook не проходит проверку подписи, проверь:
-
-```powershell
-echo $env:STRIPE_WEBHOOK_SECRET
-```
-
 Если GitHub блокирует push, проверь, что реальные секреты не попали в отслеживаемые файлы:
 
 ```text
-sk_test_
-sk_live_
-whsec_
 YOOKASSA_SECRET_KEY
+ROBOKASSA_TEST_PASSWORD1
+ROBOKASSA_TEST_PASSWORD2
+PAYANYWAY_INTEGRITY_CODE
 DATABASE_URL с паролем
 ```
 

@@ -14,13 +14,6 @@ func NewNoOpNotifications() contracts.Notifications {
 	return &NoOpNotifications{}
 }
 
-// NewDummyNotifications оставлен для совместимости со старым кодом.
-//
-// Deprecated: use NewNoOpNotifications.
-func NewDummyNotifications() contracts.Notifications {
-	return NewNoOpNotifications()
-}
-
 func (n *NoOpNotifications) Notify(ctx context.Context, resp dto.PaymentResponse) error {
 	_ = ctx
 	_ = resp

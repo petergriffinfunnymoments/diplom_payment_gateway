@@ -26,7 +26,7 @@ func BenchmarkInMemoryTransactionReport1000Rows(b *testing.B) {
 		}
 		if i%3 == 2 {
 			status = string(dto.StatusDeclined)
-			system = "STRIPE"
+			system = "PAYANYWAY"
 		}
 		benchmarkSavePayment(b, store, "merchant_benchmark", fmt.Sprintf("pay_bench_%04d", i), fmt.Sprintf("idem_bench_%04d", i), status, float64(1000+i), system, now.Add(time.Duration(i)*time.Second))
 	}

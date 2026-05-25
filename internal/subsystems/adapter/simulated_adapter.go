@@ -21,16 +21,6 @@ func NewSimulatedAdapter(paymentSystem string) contracts.PaymentAdapter {
 	return &SimulatedAdapter{paymentSystem: paymentSystem}
 }
 
-// NewDummyAdapter сохраняет совместимость со старым provider key dummy.
-//
-// Deprecated: use NewSimulatedAdapter.
-func NewDummyAdapter(paymentSystem string) contracts.PaymentAdapter {
-	if paymentSystem == "" {
-		paymentSystem = "DUMMY"
-	}
-	return NewSimulatedAdapter(paymentSystem)
-}
-
 func (a *SimulatedAdapter) Send(ctx context.Context, token string, req dto.CreatePaymentRequest) (contracts.AdapterResult, error) {
 	_ = ctx
 	_ = req

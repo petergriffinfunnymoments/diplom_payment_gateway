@@ -3,7 +3,8 @@ param(
     [switch]$RequireGovulncheck,
     [switch]$SkipGovulncheck,
     [switch]$SkipSecretScan,
-    [switch]$RunGitleaks
+    [switch]$RunGitleaks,
+    [string[]]$GoTestPackages = @("./...")
 )
 
 $ErrorActionPreference = "Stop"
@@ -85,8 +86,6 @@ function Ensure-Govulncheck {
 
 function Invoke-TrackedSecretScan {
     $patterns = @(
-        @{ Name = "Stripe secret key"; Pattern = "sk_(test|live)_[A-Za-z0-9_]{16,}" },
-        @{ Name = "Stripe webhook secret"; Pattern = "whsec_[A-Za-z0-9_]{16,}" },
         @{ Name = "Gateway generated secret key"; Pattern = "pg_sk_(test|live)_[a-fA-F0-9]{32,}" },
         @{ Name = "PostgreSQL URL with inline password"; Pattern = "postgres(?:ql)?://[A-Za-z0-9_.~-]+:[^@\s<>{}\[\]\(\)""']+@[A-Za-z0-9_.-]+" },
         @{ Name = "Private key block"; Pattern = "-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----" }
@@ -142,7 +141,7 @@ function Invoke-OptionalGitleaks {
 Push-Location $ProjectRoot
 try {
     Invoke-Step "Go unit tests" {
-        Invoke-Native "go" @("test", "./...")
+        Invoke-Native "go" (@("test") + $GoTestPackages)
     }
 
     Invoke-Step "Go vet" {

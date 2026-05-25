@@ -535,7 +535,7 @@
       "name": "Payments",
       "item": [
         {
-          "name": "POST /payments - Card MIR",
+          "name": "POST /payments - ЮKassa / карта МИР",
           "event": [
             {
               "listen": "test",
@@ -576,48 +576,7 @@
           }
         },
         {
-          "name": "POST /payments - Card Visa",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const json = pm.response.json();",
-                  "if (json.id) pm.environment.set('payment_id', json.id);",
-                  "if (json.idempotency_key) pm.environment.set('idempotency_key', json.idempotency_key);",
-                  "if (json.transaction_details && json.transaction_details.payment_url) {",
-                  "  pm.environment.set('payment_url', json.transaction_details.payment_url);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"current_status\": \"CREATED\",\n  \"payment_info\": {\n    \"amount\": {\n      \"value\": 1500,\n      \"currency\": \"RUB\"\n    },\n    \"payment_method_data\": {\n      \"type\": \"Банковская карта\"\n    },\n    \"customer_data\": {\n      \"email\": \"customer@example.com\",\n      \"phone\": \"+79991234567\",\n      \"card_number\": \"4111111111111111\",\n      \"card_date\": \"12/29\",\n      \"CVV_code\": \"123\"\n    },\n    \"description\": \"Оплата заказа Postman Visa\",\n    \"created_at\": \"{{created_at}}\"\n  }\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/payments",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "payments"
-              ]
-            }
-          }
-        },
-        {
-          "name": "POST /payments - Robokassa SBP",
+          "name": "POST /payments - Robokassa / СБП",
           "event": [
             {
               "listen": "test",
@@ -658,7 +617,48 @@
           }
         },
         {
-          "name": "POST /payments - Digital Ruble",
+          "name": "POST /payments - PayAnyWay / СБП",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('payment_id', json.id);",
+                  "if (json.idempotency_key) pm.environment.set('idempotency_key', json.idempotency_key);",
+                  "if (json.transaction_details && json.transaction_details.payment_url) {",
+                  "  pm.environment.set('payment_url', json.transaction_details.payment_url);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"current_status\": \"CREATED\",\n  \"payment_info\": {\n    \"amount\": {\n      \"value\": 1500,\n      \"currency\": \"RUB\"\n    },\n    \"payment_method_data\": {\n      \"type\": \"СБП\"\n    },\n    \"customer_data\": {\n      \"email\": \"customer@example.com\",\n      \"phone\": \"+79991234567\"\n    },\n    \"items\": [\n      {\n        \"name\": \"Тестовая услуга интернет-магазина\",\n        \"price\": 1500,\n        \"quantity\": 1,\n        \"vat_tag\": \"1105\",\n        \"payment_method\": \"full_payment\",\n        \"payment_object\": \"service\",\n        \"id_internal\": \"service_1\"\n      }\n    ],\n    \"description\": \"Оплата заказа Postman PayAnyWay\",\n    \"created_at\": \"{{created_at}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /payments - Цифровой рубль / QR",
           "event": [
             {
               "listen": "test",
@@ -705,7 +705,7 @@
           }
         },
         {
-          "name": "POST /sandbox/digital-ruble/scan - Capture QR",
+          "name": "POST /sandbox/digital-ruble/scan - сканирование QR",
           "event": [
             {
               "listen": "test",
@@ -1202,7 +1202,7 @@
                 {
                   "key": "payment_system",
                   "value": "{{report_payment_system}}",
-                  "description": "Optional: YOOKASSA, STRIPE, DIGITAL_RUBLE, DUMMY..."
+                  "description": "Optional: YOOKASSA, ROBOKASSA, PAYANYWAY, DIGITAL_RUBLE, SIMULATED..."
                 },
                 {
                   "key": "payment_method",

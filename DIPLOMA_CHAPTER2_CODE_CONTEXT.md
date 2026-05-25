@@ -27,8 +27,8 @@
 Проект поддерживает несколько вариантов платежных систем:
 
 - YooKassa через redirect-сценарий;
-- Stripe Checkout в тестовом режиме;
 - Robokassa через платежную форму и тестовый режим;
+- PayAnyWay через платежную форму MONETA.Assistant и тестовый режим;
 - эмуляционный адаптер цифрового рубля;
 - симулированный адаптер для локальных проверок и тестовых сценариев.
 
@@ -75,7 +75,7 @@ cmd/payment-gateway/main.go
 - инфраструктурный уровень: PostgreSQL-хранилища, адаптеры провайдеров, webhook-уведомления, логирование;
 - инструментальный уровень: PowerShell-скрипты, Postman-коллекция, проверочные SQL-файлы.
 
-Такой подход близок к принципам hexagonal architecture: центральная бизнес-логика работает с абстракциями, а внешние системы подключаются через адаптеры. Например, оркестратор не вызывает YooKassa или Stripe напрямую. Он получает выбранный `adapterKey`, запрашивает адаптер у фабрики и вызывает общий метод `Send`.
+Такой подход близок к принципам hexagonal architecture: центральная бизнес-логика работает с абстракциями, а внешние системы подключаются через адаптеры. Например, оркестратор не вызывает YooKassa, Robokassa или PayAnyWay напрямую. Он получает выбранный `adapterKey`, запрашивает адаптер у фабрики и вызывает общий метод `Send`.
 
 ## 4. Основная структура каталогов
 
@@ -151,8 +151,8 @@ POST /refunds/search
 GET  /reports/transactions
 
 POST /webhooks/yookassa
-POST /webhooks/stripe
 POST /webhooks/robokassa
+POST /webhooks/payanyway
 POST /webhooks/digital-ruble
 POST /sandbox/digital-ruble/scan
 
@@ -189,7 +189,7 @@ internal/contracts/interfaces.go
 - `CallbackHandler` преобразует результат адаптера в итоговый `PaymentResponse`;
 - `PaymentOrchestrator` описывает основной метод создания платежа.
 
-Такой набор интерфейсов позволяет заменять реализации. Например, для тестов можно использовать in-memory store, а в реальном запуске подключить PostgreSQL. Точно так же вместо симулированного адаптера можно использовать YooKassa, Stripe или адаптер цифрового рубля.
+Такой набор интерфейсов позволяет заменять реализации. Например, для тестов можно использовать in-memory store, а в реальном запуске подключить PostgreSQL. Точно так же вместо симулированного адаптера можно использовать YooKassa, Robokassa, PayAnyWay или адаптер цифрового рубля.
 
 ## 7. DTO платежного шлюза
 
@@ -377,12 +377,13 @@ Endpoints:
 
 ```text
 POST /webhooks/yookassa
-POST /webhooks/stripe
+POST /webhooks/robokassa
+POST /webhooks/payanyway
 POST /webhooks/digital-ruble
 POST /sandbox/digital-ruble/scan
 ```
 
-Webhook-и используются для обновления статуса платежа после внешнего события. Например, YooKassa и Stripe сначала возвращают ссылку на оплату и статус `PENDING`. Окончательный статус приходит позже через webhook.
+Webhook-и используются для обновления статуса платежа после внешнего события. Например, YooKassa, Robokassa и PayAnyWay сначала возвращают ссылку на оплату и статус `PENDING`. Окончательный статус приходит позже через webhook.
 
 Эмулятор цифрового рубля использует sandbox endpoint, который имитирует сканирование QR-кода покупателем.
 
@@ -496,7 +497,7 @@ Workflow engine хранит сессии обработки платежа. Sta
 
 `callback.go` преобразует низкоуровневый `AdapterResult` в итоговый `PaymentResponse`.
 
-Именно здесь данные адаптера превращаются в унифицированный формат шлюза. Например, у Stripe, YooKassa и цифрового рубля разные собственные ответы, но наружу шлюз возвращает единый `PaymentResponse`.
+Именно здесь данные адаптера превращаются в унифицированный формат шлюза. Например, у YooKassa, Robokassa, PayAnyWay и цифрового рубля разные собственные ответы, но наружу шлюз возвращает единый `PaymentResponse`.
 
 ## 11. Валидация платежных данных
 
@@ -587,7 +588,7 @@ internal/subsystems/tokenizer
 - `EphemeralTokenizer` - простая временная реализация без постоянного хранения;
 - `PostgresTokenizer` - реализация с сохранением в PostgreSQL.
 
-Токенизация создает внутренний токен вида `tok_...`, который используется внутри шлюза как абстракция над платежными данными. Внешние redirect-сценарии YooKassa и Stripe не требуют передачи карты из шлюза провайдеру, потому что пользователь вводит карту на стороне провайдера. Тем не менее внутренний токен нужен для унификации жизненного цикла.
+Токенизация создает внутренний токен вида `tok_...`, который используется внутри шлюза как абстракция над платежными данными. Внешние redirect-сценарии YooKassa, Robokassa и PayAnyWay не требуют передачи карты из шлюза провайдеру, потому что пользователь вводит платежные данные на стороне провайдера. Тем не менее внутренний токен нужен для унификации жизненного цикла.
 
 `PostgresTokenizer` сохраняет данные в таблицу:
 
@@ -626,10 +627,8 @@ internal/subsystems/routing/postgres_routes.go
 
 1. Если способ оплаты - банковская карта, шлюз пытается определить схему карты по номеру.
 2. Для карт МИР используется YooKassa.
-3. Для Visa используется Stripe.
-4. Для Mastercard используется Stripe.
-5. Если схему карты определить нельзя, маршрутизатор обращается к таблице правил `merchant_payment_routes`.
-6. Если правило не найдено, используется fallback-логика.
+3. Для остальных карт маршрутизатор обращается к таблице правил `merchant_payment_routes`.
+4. Если правило не найдено, используется provider из переменных окружения. Если provider не задан, шлюз возвращает ошибку конфигурации вместо имитации платежа.
 
 Определение карты реализовано в:
 
@@ -659,14 +658,13 @@ internal/subsystems/adapter/factory.go
 
 ```text
 yookassa
-stripe
 robokassa
+payanyway
 digital_ruble
-dummy
 simulated
 ```
 
-Если для Stripe или YooKassa не заданы переменные окружения, соответствующий адаптер не регистрируется как полноценный внешний провайдер. В этом случае попытка использовать его может завершиться ошибкой конфигурации.
+Если для YooKassa, Robokassa или PayAnyWay не заданы переменные окружения, соответствующий адаптер не регистрируется как полноценный внешний провайдер. В этом случае попытка использовать его может завершиться ошибкой конфигурации.
 
 Архитектурно фабрика отделяет выбор провайдера от создания конкретного клиента внешней платежной системы.
 
@@ -695,37 +693,7 @@ internal/subsystems/adapter/yookassa_adapter.go
 
 Внутренний токен шлюза не отправляется в YooKassa.
 
-## 17. Адаптер Stripe
-
-Файл:
-
-```text
-internal/subsystems/adapter/stripe_adapter.go
-```
-
-Stripe adapter использует Stripe Checkout Session.
-
-Основной сценарий:
-
-1. Шлюз получает платеж.
-2. Оркестратор выбирает адаптер `stripe`.
-3. Stripe adapter создает Checkout Session.
-4. Stripe возвращает URL страницы оплаты.
-5. Шлюз возвращает интернет-магазину `payment_url`.
-6. Пользователь оплачивает на странице Stripe.
-7. Stripe отправляет webhook на `/webhooks/stripe`.
-8. Шлюз обновляет статус платежа.
-
-Для Stripe используются переменные окружения:
-
-```text
-STRIPE_SECRET_KEY
-STRIPE_WEBHOOK_SECRET
-```
-
-Адаптер поддерживает создание платежа и возврат через Stripe Refund API. Если для возврата передан внешний идентификатор Checkout Session, адаптер дополнительно получает `payment_intent`.
-
-## 18. Адаптер Robokassa
+## 17. Адаптер Robokassa
 
 Файл:
 
@@ -733,7 +701,7 @@ STRIPE_WEBHOOK_SECRET
 internal/subsystems/adapter/robokassa_adapter.go
 ```
 
-Robokassa adapter подключен как российский платежный провайдер, который подходит для тестирования самозанятого мерчанта. В отличие от YooKassa и Stripe, адаптер не создает платеж через JSON API, а формирует ссылку на платежную форму Robokassa.
+Robokassa adapter подключен как российский платежный провайдер, который подходит для тестирования самозанятого мерчанта. В отличие от YooKassa, адаптер не создает платеж через JSON API, а формирует ссылку на платежную форму Robokassa.
 
 Основной сценарий:
 
@@ -757,6 +725,43 @@ ROBOKASSA_HASH_ALGORITHM
 ```
 
 В тестовом режиме адаптер использует тестовую пару паролей и не инициирует реальное списание средств.
+
+## 18. Адаптер PayAnyWay
+
+Файл:
+
+```text
+internal/subsystems/adapter/payanyway_adapter.go
+```
+
+PayAnyWay adapter подключен как еще один российский платежный провайдер. Интеграция реализована через платежную форму MONETA.Assistant: шлюз не списывает деньги напрямую, а формирует ссылку с параметрами платежа и подписью.
+
+Основной сценарий:
+
+1. Шлюз получает платеж.
+2. Маршрутизатор выбирает provider key `payanyway`.
+3. Адаптер формирует параметры `MNT_ID`, `MNT_TRANSACTION_ID`, `MNT_AMOUNT`, `MNT_CURRENCY_CODE`, `MNT_TEST_MODE`.
+4. В качестве `MNT_SUBSCRIBER_ID` передается внутренний `merchant_id`, чтобы webhook мог связать внешний callback с мерчантом.
+5. Рассчитывается `MNT_SIGNATURE` на основе параметров платежа и кода проверки целостности данных.
+6. Шлюз возвращает интернет-магазину `payment_url` и статус `PENDING`.
+7. После тестовой оплаты PayAnyWay отправляет Pay URL callback на `/webhooks/payanyway`.
+8. Webhook handler проверяет `MNT_SIGNATURE`, обновляет платеж до `CAPTURED` и отвечает XML-документом `MNT_RESPONSE`.
+9. В XML-ответ добавляются атрибуты `INVENTORY` и `CLIENT`, чтобы PayAnyWay мог получить номенклатуру заказа для регистрации дохода самозанятого.
+
+Для PayAnyWay используются переменные окружения:
+
+```text
+PAYANYWAY_MNT_ID
+PAYANYWAY_INTEGRITY_CODE
+PAYANYWAY_TEST_MODE
+PAYANYWAY_PAYMENT_URL
+PAYANYWAY_PAYMENT_UNIT_ID
+PAYANYWAY_SNO
+```
+
+По умолчанию для СБП используется `paymentSystem.unitId=sbpc2b`, для банковской карты - `paymentSystem.unitId=card`.
+
+В DTO платежа добавлено поле `payment_info.items`. Оно содержит позиции заказа: название, цену, количество, ставку НДС/признак без НДС, признак способа расчета, признак предмета расчета и внутренний идентификатор позиции. Если позиции не переданы, webhook PayAnyWay формирует одну позицию из описания и суммы платежа.
 
 ## 19. Эмуляционный адаптер цифрового рубля
 
@@ -802,7 +807,6 @@ QR-код не является реальным QR цифрового рубл�
 Provider keys:
 
 ```text
-dummy
 simulated
 ```
 
@@ -824,19 +828,13 @@ YooKassa webhook принимает уведомление провайдера,
 
 После обработки webhook шлюз обновляет сохраненный `PaymentResponse` в `payment_transactions` и отправляет уведомление интернет-магазину.
 
-### 21.2. Stripe webhook
-
-Stripe webhook принимает события Checkout Session. Важные события:
-
-- `checkout.session.completed`;
-- `checkout.session.expired`;
-- `checkout.session.async_payment_failed`.
-
-Webhook связывает внешний платеж с внутренним через metadata и обновляет состояние транзакции.
-
-### 21.3. Robokassa ResultURL
+### 21.2. Robokassa ResultURL
 
 Robokassa ResultURL принимает form-urlencoded запросы от Robokassa после успешной оплаты. Обработчик проверяет `SignatureValue`, рассчитанный по `OutSum`, `InvId`, тестовому паролю #2 и параметрам `Shp_*`. Если подпись корректна, платеж обновляется до `CAPTURED`, а Robokassa получает ответ `OK<InvId>`.
+
+### 21.3. PayAnyWay Pay URL
+
+PayAnyWay Pay URL принимает form-urlencoded запросы после успешной оплаты. Обработчик проверяет `MNT_SIGNATURE`, рассчитанный по `MNT_ID`, `MNT_TRANSACTION_ID`, `MNT_OPERATION_ID`, сумме, валюте, `MNT_SUBSCRIBER_ID`, `MNT_TEST_MODE` и коду проверки целостности данных. Если подпись корректна, платеж обновляется до `CAPTURED`, а PayAnyWay получает XML-ответ `MNT_RESPONSE` с кодом результата `200`, подписью ответа и номенклатурой заказа в атрибуте `INVENTORY`.
 
 ### 21.4. Digital Ruble sandbox webhook
 
@@ -891,7 +889,7 @@ payment_refunds
 - причину возврата;
 - временные метки.
 
-Адаптеры YooKassa, Stripe, digital_ruble и simulated реализуют общий интерфейс возврата.
+Адаптеры YooKassa, digital_ruble и simulated реализуют общий интерфейс возврата. Robokassa и PayAnyWay в текущей версии используются для создания платежей и не реализуют refund-интерфейс.
 
 ## 23. Отчеты и статистика
 
@@ -1261,7 +1259,7 @@ go vet ./...
 
 Он запускает набор проверок проекта. В контексте второй главы это можно описать как автоматизированную проверку корректности реализации.
 
-Важно: в проекте есть unit/component tests и ручное API-тестирование через Postman. Полноценные end-to-end тесты с реальными YooKassa/Stripe/PostgreSQL в CI не являются основным механизмом тестирования.
+Важно: в проекте есть unit/component tests и ручное API-тестирование через Postman. Полноценные end-to-end тесты с реальными YooKassa, Robokassa, PayAnyWay и PostgreSQL в CI не являются основным механизмом тестирования.
 
 ## 32. Как развивался код
 
@@ -1274,7 +1272,7 @@ go vet ./...
 - простая валидация;
 - простой оркестратор;
 - in-memory store;
-- dummy/simulated adapter.
+- simulated adapter.
 
 Затем проект был декомпозирован на подсистемы. Были выделены интерфейсы в `internal/contracts`, чтобы отделить бизнес-логику от инфраструктурных деталей.
 
@@ -1291,16 +1289,17 @@ go vet ./...
 После этого были добавлены реальные платежные адаптеры:
 
 - YooKassa;
-- Stripe.
+- Robokassa;
+- PayAnyWay.
 
-Их подключение потребовало реализации redirect/checkout flow и webhook-обработчиков. Это изменило модель платежа: создание платежа часто стало возвращать `PENDING`, а окончательный статус начал приходить позже через webhook.
+Их подключение потребовало реализации redirect/payment-form flow и webhook-обработчиков. Это изменило модель платежа: создание платежа часто стало возвращать `PENDING`, а окончательный статус начал приходить позже через webhook.
 
 Далее был добавлен маршрутизатор платежей:
 
 - банковские карты МИР отправляются в YooKassa;
-- Visa и Mastercard отправляются в Stripe;
+- остальные карты могут использовать таблицу маршрутов или provider из переменных окружения;
 - цифровой рубль отправляется в `digital_ruble`;
-- остальные способы могут использовать таблицу маршрутов или fallback.
+- СБП может маршрутизироваться в Robokassa или PayAnyWay через таблицу маршрутов.
 
 Затем был добавлен модуль возвратов. Для него появились отдельные DTO, endpoint-ы, таблица `payment_refunds` и поддержка refund-операций в адаптерах.
 
@@ -1398,7 +1397,7 @@ go vet ./...
 
 ### 2.5. Проектирование маршрутизации и адаптеров платежных систем
 
-Описать выбор YooKassa/Stripe/digital_ruble, card scheme detection, factory adapter, adapter pattern, redirect/checkout flow.
+Описать выбор YooKassa/Robokassa/PayAnyWay/digital_ruble, card scheme detection, factory adapter, adapter pattern, redirect/payment-form flow.
 
 ### 2.6. Проектирование эмулятора цифрового рубля
 
@@ -1418,7 +1417,7 @@ go vet ./...
 
 ### 2.10. Тестирование разработанных модулей
 
-Описать unit/component tests, ручное тестирование через Postman, проверку сценариев YooKassa, Stripe, digital ruble, refunds, reports.
+Описать unit/component tests, ручное тестирование через Postman, проверку сценариев YooKassa, Robokassa, PayAnyWay, digital ruble, refunds, reports.
 
 ## 37. Краткое резюме архитектуры
 

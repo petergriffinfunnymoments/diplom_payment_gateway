@@ -47,8 +47,6 @@ func providerForCardScheme(scheme string) (paymentSystem string, adapterKey stri
 	switch strings.ToUpper(strings.TrimSpace(scheme)) {
 	case cardSchemeMir:
 		return "YOOKASSA", "yookassa", true
-	case cardSchemeVisa, cardSchemeMastercard:
-		return "STRIPE", "stripe", true
 	default:
 		return "", "", false
 	}

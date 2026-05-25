@@ -49,6 +49,30 @@ func TestValidateRemovesCVVFromReturnedRequestOnError(t *testing.T) {
 	}
 }
 
+func TestValidateAllowsReceiptItems(t *testing.T) {
+	v := NewPaymentDataValidator()
+	req := validCardRequest()
+	req.PaymentInfo.Items = []dto.PaymentItem{
+		{
+			Name:          "Тестовая услуга",
+			Price:         1500,
+			Quantity:      1,
+			VATTag:        "1105",
+			PaymentMethod: "full_payment",
+			PaymentObject: "service",
+			IDInternal:    "service_1",
+		},
+	}
+
+	validated, err := v.Validate(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(validated.PaymentInfo.Items) != 1 {
+		t.Fatalf("expected receipt item to be preserved")
+	}
+}
+
 func validCardRequest() dto.CreatePaymentRequest {
 	return dto.CreatePaymentRequest{
 		MerchantID:     "merchant_12345",

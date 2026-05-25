@@ -54,12 +54,6 @@ func NewPaymentDataValidator() contracts.PaymentValidator {
 	return &PaymentDataValidator{validate: v}
 }
 
-// Для совместимости со старым кодом можно оставить это имя.
-// Тогда orchestrator.go можно не менять.
-func NewDummyValidator() contracts.PaymentValidator {
-	return NewPaymentDataValidator()
-}
-
 func (v *PaymentDataValidator) Validate(ctx context.Context, req dto.CreatePaymentRequest) (dto.CreatePaymentRequest, error) {
 	if err := ctx.Err(); err != nil {
 		return req.WithoutSensitiveAuthenticationData(), err
@@ -89,6 +83,7 @@ type paymentInfoValidationModel struct {
 	Amount            amountValidationModel            `validate:"required"`
 	PaymentMethodData paymentMethodDataValidationModel `validate:"required"`
 	CustomerData      customerDataValidationModel      `validate:"required"`
+	Items             []paymentItemValidationModel     `validate:"omitempty,dive"`
 	CreatedAt         time.Time                        `validate:"required"`
 	Description       string                           `validate:"required,min=3,max=255"`
 }
@@ -112,6 +107,16 @@ type customerDataValidationModel struct {
 	DigitalRubleWalletID   string `validate:"omitempty,digital_ruble_identifier"`
 	DigitalRubleAccount    string `validate:"omitempty,digital_ruble_account"`
 	DigitalRubleIdentifier string `validate:"omitempty,digital_ruble_identifier"`
+}
+
+type paymentItemValidationModel struct {
+	Name          string  `validate:"required,min=1,max=128"`
+	Price         float64 `validate:"required,gt=0,lte=1000000"`
+	Quantity      float64 `validate:"required,gt=0,lte=100000"`
+	VATTag        string  `validate:"omitempty,max=32"`
+	PaymentMethod string  `validate:"omitempty,max=32"`
+	PaymentObject string  `validate:"omitempty,max=32"`
+	IDInternal    string  `validate:"omitempty,max=64"`
 }
 
 func toValidationModel(req dto.CreatePaymentRequest) createPaymentValidationModel {
@@ -139,10 +144,30 @@ func toValidationModel(req dto.CreatePaymentRequest) createPaymentValidationMode
 				DigitalRubleAccount:    req.PaymentInfo.CustomerData.DigitalRubleAccount,
 				DigitalRubleIdentifier: req.PaymentInfo.CustomerData.DigitalRubleIdentifier,
 			},
+			Items:       toPaymentItemValidationModels(req.PaymentInfo.Items),
 			CreatedAt:   req.PaymentInfo.CreatedAt,
 			Description: req.PaymentInfo.Description,
 		},
 	}
+}
+
+func toPaymentItemValidationModels(items []dto.PaymentItem) []paymentItemValidationModel {
+	if len(items) == 0 {
+		return nil
+	}
+	models := make([]paymentItemValidationModel, 0, len(items))
+	for _, item := range items {
+		models = append(models, paymentItemValidationModel{
+			Name:          item.Name,
+			Price:         item.Price,
+			Quantity:      item.Quantity,
+			VATTag:        item.VATTag,
+			PaymentMethod: item.PaymentMethod,
+			PaymentObject: item.PaymentObject,
+			IDInternal:    item.IDInternal,
+		})
+	}
+	return models
 }
 
 func normalizeRequest(req dto.CreatePaymentRequest) dto.CreatePaymentRequest {
@@ -166,6 +191,13 @@ func normalizeRequest(req dto.CreatePaymentRequest) dto.CreatePaymentRequest {
 	customer.DigitalRubleAccount = strings.TrimSpace(customer.DigitalRubleAccount)
 	customer.DigitalRubleIdentifier = strings.TrimSpace(customer.DigitalRubleIdentifier)
 	req.PaymentInfo.CustomerData = customer
+	for i := range req.PaymentInfo.Items {
+		req.PaymentInfo.Items[i].Name = strings.TrimSpace(req.PaymentInfo.Items[i].Name)
+		req.PaymentInfo.Items[i].VATTag = strings.TrimSpace(req.PaymentInfo.Items[i].VATTag)
+		req.PaymentInfo.Items[i].PaymentMethod = strings.TrimSpace(req.PaymentInfo.Items[i].PaymentMethod)
+		req.PaymentInfo.Items[i].PaymentObject = strings.TrimSpace(req.PaymentInfo.Items[i].PaymentObject)
+		req.PaymentInfo.Items[i].IDInternal = strings.TrimSpace(req.PaymentInfo.Items[i].IDInternal)
+	}
 
 	return req
 }

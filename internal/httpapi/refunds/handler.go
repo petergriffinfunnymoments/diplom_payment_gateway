@@ -365,14 +365,12 @@ func providerKey(paymentSystem string) string {
 	switch strings.ToUpper(strings.TrimSpace(paymentSystem)) {
 	case "YOOKASSA":
 		return "yookassa"
-	case "STRIPE":
-		return "stripe"
 	case "ROBOKASSA":
 		return "robokassa"
+	case "PAYANYWAY":
+		return "payanyway"
 	case "SIMULATED":
 		return "simulated"
-	case "DUMMY":
-		return "dummy"
 	case "DIGITAL_RUBLE":
 		return "digital_ruble"
 	default:

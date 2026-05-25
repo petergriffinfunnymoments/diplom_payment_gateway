@@ -112,7 +112,7 @@ func normalizePaymentSystem(system string, provider string) string {
 	}
 	provider = normalizeProvider(provider)
 	if provider == "" {
-		return "DUMMY"
+		return ""
 	}
 	return strings.ToUpper(provider)
 }

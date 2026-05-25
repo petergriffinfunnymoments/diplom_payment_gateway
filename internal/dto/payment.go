@@ -25,6 +25,17 @@ type AmountMoney struct {
 	Currency PaymentCurrency `json:"currency"`
 }
 
+// PaymentItem описывает позицию заказа для платежных систем, которым нужна номенклатура.
+type PaymentItem struct {
+	Name          string  `json:"name"`
+	Price         float64 `json:"price"`
+	Quantity      float64 `json:"quantity"`
+	VATTag        string  `json:"vat_tag,omitempty"`
+	PaymentMethod string  `json:"payment_method,omitempty"`
+	PaymentObject string  `json:"payment_object,omitempty"`
+	IDInternal    string  `json:"id_internal,omitempty"`
+}
+
 // CustomerData — данные клиента (в зависимости от типа оплаты набор полей может отличаться).
 type CustomerData struct {
 	Email                  string `json:"email,omitempty"`
@@ -57,6 +68,7 @@ type PaymentInfo struct {
 	Amount            AmountMoney       `json:"amount"`
 	PaymentMethodData PaymentMethodData `json:"payment_method_data"`
 	CustomerData      CustomerData      `json:"customer_data"`
+	Items             []PaymentItem     `json:"items,omitempty"`
 	CreatedAt         time.Time         `json:"created_at"`
 	Description       string            `json:"description"`
 }
@@ -78,6 +90,7 @@ type PaymentInfoResponse struct {
 	Amount            AmountMoney       `json:"amount"`
 	PaymentMethodData PaymentMethodData `json:"payment_method_data"`
 	CustomerData      CustomerData      `json:"customer_data"`
+	Items             []PaymentItem     `json:"items,omitempty"`
 	Description       string            `json:"description"`
 	CreatedAt         time.Time         `json:"created_at"`
 	UpdatedAt         time.Time         `json:"updated_at"`

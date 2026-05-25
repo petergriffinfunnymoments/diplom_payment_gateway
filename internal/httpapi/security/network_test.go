@@ -136,7 +136,7 @@ func TestWebhookNetworkMiddlewareRejectsOutsideAllowlist(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequest(http.MethodPost, "http://example.test/webhooks/stripe", strings.NewReader("{}"))
+	req := httptest.NewRequest(http.MethodPost, "http://example.test/webhooks/payanyway", strings.NewReader("{}"))
 	req.RemoteAddr = "198.51.100.10:12345"
 
 	rec := httptest.NewRecorder()

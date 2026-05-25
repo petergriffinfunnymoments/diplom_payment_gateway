@@ -8,7 +8,7 @@ import (
 var (
 	panCandidateRegexp = regexp.MustCompile(`\b\d{13,19}\b`)
 	cvvJSONRegexp      = regexp.MustCompile(`(?i)("?(?:CVV_code|cvv|cvc|cid)"?\s*[:=]\s*"?)[0-9]{3,4}("?)*`)
-	secretRegexp       = regexp.MustCompile(`(?i)\b(sk_(?:test|live)_[A-Za-z0-9_]+|whsec_[A-Za-z0-9_]+|YOOKASSA_SECRET_KEY\s*[:=]\s*\S+|STRIPE_SECRET_KEY\s*[:=]\s*\S+)\b`)
+	secretRegexp       = regexp.MustCompile(`(?i)\b(YOOKASSA_SECRET_KEY\s*[:=]\s*\S+|PAYANYWAY_INTEGRITY_CODE\s*[:=]\s*\S+|ROBOKASSA_(?:TEST_)?PASSWORD[12]\s*[:=]\s*\S+)\b`)
 )
 
 func MaskCardNumber(card string) string {

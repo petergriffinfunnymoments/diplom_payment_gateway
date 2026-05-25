@@ -14,7 +14,6 @@ type Factory struct {
 
 func NewFactory() *Factory {
 	f := &Factory{adapters: map[string]contracts.PaymentAdapter{}}
-	f.Register("dummy", NewSimulatedAdapter("DUMMY"))
 	f.Register("simulated", NewSimulatedAdapter("SIMULATED"))
 	f.Register("digital_ruble", NewDigitalRubleAdapterFromEnv())
 	return f
@@ -27,12 +26,12 @@ func NewFactoryFromEnv() *Factory {
 		f.Register("yookassa", a)
 	}
 
-	if a, err := NewStripeAdapterFromEnv(); err == nil {
-		f.Register("stripe", a)
-	}
-
 	if a, err := NewRobokassaAdapterFromEnv(); err == nil {
 		f.Register("robokassa", a)
+	}
+
+	if a, err := NewPayAnyWayAdapterFromEnv(); err == nil {
+		f.Register("payanyway", a)
 	}
 
 	return f
@@ -58,7 +57,7 @@ func (f *Factory) Get(key string) (contracts.PaymentAdapter, bool) {
 }
 
 // Resolve возвращает конкретный адаптер.
-// Если маршрутизатор уже выбрал provider (например, yookassa или stripe), фабрика просто возвращает
+// Если маршрутизатор уже выбрал provider (например, yookassa или payanyway), фабрика просто возвращает
 // соответствующую реализацию. Для старых adapterKey вида card_adapter сохраняется fallback через env.
 func (f *Factory) Resolve(adapterKey string, paymentSystem string) (contracts.PaymentAdapter, string, error) {
 	key := normalizeAdapterKey(adapterKey)
@@ -71,21 +70,17 @@ func (f *Factory) Resolve(adapterKey string, paymentSystem string) (contracts.Pa
 		return nil, "", fmt.Errorf("adapter provider %q is not registered or not configured", key)
 	}
 
-	// Старый режим/fallback: выбираем provider из env, иначе совместимый fallback dummy.
+	// Старый режим/fallback: выбираем provider из env.
 	providerKey := providerFromEnv(key, paymentSystem)
+	if providerKey == "" {
+		return nil, "", fmt.Errorf("payment provider is not configured for adapter key %q", adapterKey)
+	}
+
 	if a, ok := f.Get(providerKey); ok {
 		return a, providerKey, nil
 	}
 
-	if providerKey != "dummy" {
-		return nil, "", fmt.Errorf("adapter provider %q is not registered or not configured", providerKey)
-	}
-
-	if a, ok := f.Get("dummy"); ok {
-		return a, "dummy", nil
-	}
-
-	return nil, "", fmt.Errorf("adapter provider %q is not registered", providerKey)
+	return nil, "", fmt.Errorf("adapter provider %q is not registered or not configured", providerKey)
 }
 
 func providerFromEnv(adapterKey string, paymentSystem string) string {
@@ -114,7 +109,7 @@ func providerFromEnv(adapterKey string, paymentSystem string) string {
 		return v
 	}
 
-	return "dummy"
+	return ""
 }
 
 func isLegacyAdapterKey(v string) bool {

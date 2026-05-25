@@ -37,3 +37,15 @@
 # $env:ROBOKASSA_HASH_ALGORITHM="md5"
 # Result URL in Robokassa technical settings:
 # https://<public-url>/webhooks/robokassa
+
+# Optional PayAnyWay test integration.
+# $env:PAYANYWAY_MNT_ID="<business-account>"
+# $env:PAYANYWAY_INTEGRITY_CODE="<integrity-code>"
+# $env:PAYANYWAY_TEST_MODE="true"
+# $env:PAYANYWAY_PAYMENT_URL="https://www.payanyway.ru/assistant.htm"
+# Optional payment system override: card, sbpc2b, etc.
+# $env:PAYANYWAY_PAYMENT_UNIT_ID="sbpc2b"
+# Optional taxation system attribute for PayAnyWay receipt XML response.
+# $env:PAYANYWAY_SNO="<tax-system-code>"
+# Pay URL / payment notification URL in PayAnyWay settings:
+# https://<public-url>/webhooks/payanyway

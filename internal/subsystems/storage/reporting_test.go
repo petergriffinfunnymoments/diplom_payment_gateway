@@ -19,8 +19,8 @@ func TestInMemoryTransactionReportBuildsMerchantScopedSummary(t *testing.T) {
 
 	now := time.Now().UTC()
 	savePayment(t, store, "merchant_12345", "pay_1", "idem_1", string(dto.StatusCaptured), 1500, "YOOKASSA", now)
-	savePayment(t, store, "merchant_12345", "pay_2", "idem_2", string(dto.StatusDeclined), 700, "STRIPE", now.Add(time.Second))
-	savePayment(t, store, "merchant_other", "pay_3", "idem_3", string(dto.StatusCaptured), 9999, "STRIPE", now.Add(2*time.Second))
+	savePayment(t, store, "merchant_12345", "pay_2", "idem_2", string(dto.StatusDeclined), 700, "PAYANYWAY", now.Add(time.Second))
+	savePayment(t, store, "merchant_other", "pay_3", "idem_3", string(dto.StatusCaptured), 9999, "PAYANYWAY", now.Add(2*time.Second))
 
 	report, err := reportStore.BuildTransactionReport(context.Background(), dto.TransactionReportFilter{
 		MerchantID: "merchant_12345",
@@ -53,7 +53,7 @@ func TestInMemoryTransactionReportFiltersByStatus(t *testing.T) {
 
 	now := time.Now().UTC()
 	savePayment(t, store, "merchant_12345", "pay_1", "idem_1", string(dto.StatusCaptured), 1500, "YOOKASSA", now)
-	savePayment(t, store, "merchant_12345", "pay_2", "idem_2", string(dto.StatusDeclined), 700, "STRIPE", now.Add(time.Second))
+	savePayment(t, store, "merchant_12345", "pay_2", "idem_2", string(dto.StatusDeclined), 700, "PAYANYWAY", now.Add(time.Second))
 
 	report, err := reportStore.BuildTransactionReport(context.Background(), dto.TransactionReportFilter{
 		MerchantID: "merchant_12345",

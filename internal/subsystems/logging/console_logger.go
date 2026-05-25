@@ -16,13 +16,6 @@ func NewConsoleEventLogger(logger log.Logger) contracts.EventLogger {
 	return &ConsoleEventLogger{logger: logger}
 }
 
-// NewDummyEventLogger оставлен для совместимости со старым кодом.
-//
-// Deprecated: use NewConsoleEventLogger.
-func NewDummyEventLogger(logger log.Logger) contracts.EventLogger {
-	return NewConsoleEventLogger(logger)
-}
-
 func (l *ConsoleEventLogger) Log(ctx context.Context, event contracts.PaymentEvent) error {
 	_ = ctx
 

@@ -48,12 +48,6 @@ func NewRuleBasedAntiFraud() contracts.AntiFraud {
 	}
 }
 
-// NewDummyAntiFraud оставлен для совместимости со старым кодом оркестратора.
-// Фактически теперь он возвращает рабочий rule-based антифрод, а не заглушку.
-func NewDummyAntiFraud() contracts.AntiFraud {
-	return NewRuleBasedAntiFraud()
-}
-
 func (a *RuleBasedAntiFraud) Check(ctx context.Context, req dto.CreatePaymentRequest) (contracts.AntiFraudResult, error) {
 	if err := ctx.Err(); err != nil {
 		return contracts.AntiFraudResult{}, err
