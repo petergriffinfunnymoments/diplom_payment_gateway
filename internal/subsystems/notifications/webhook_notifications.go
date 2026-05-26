@@ -51,6 +51,12 @@ type MerchantNotificationPayload struct {
 	ParticipantBank      string          `json:"participant_bank,omitempty"`
 	SchemaVersion        string          `json:"schema_version,omitempty"`
 	SettlementHint       string          `json:"settlement_hint,omitempty"`
+	MoneyMark            string          `json:"money_mark,omitempty"`
+	SmartContractID      string          `json:"smart_contract_id,omitempty"`
+	SmartContractResult  string          `json:"smart_contract_result,omitempty"`
+	SmartContractReason  string          `json:"smart_contract_reason,omitempty"`
+	PlatformMessageID    string          `json:"platform_message_id,omitempty"`
+	PlatformTransport    string          `json:"platform_transport,omitempty"`
 	ErrorCode            string          `json:"error_code,omitempty"`
 	ErrorMessage         string          `json:"error_message,omitempty"`
 	OccurredAt           time.Time       `json:"occurred_at"`
@@ -119,6 +125,12 @@ func (n *WebhookNotifications) Notify(ctx context.Context, resp dto.PaymentRespo
 		ParticipantBank:      resp.TransactionDetails.ParticipantBank,
 		SchemaVersion:        resp.TransactionDetails.SchemaVersion,
 		SettlementHint:       resp.TransactionDetails.SettlementHint,
+		MoneyMark:            resp.TransactionDetails.MoneyMark,
+		SmartContractID:      resp.TransactionDetails.SmartContractID,
+		SmartContractResult:  resp.TransactionDetails.SmartContractResult,
+		SmartContractReason:  resp.TransactionDetails.SmartContractReason,
+		PlatformMessageID:    resp.TransactionDetails.PlatformMessageID,
+		PlatformTransport:    resp.TransactionDetails.PlatformTransport,
 		OccurredAt:           time.Now().UTC(),
 	}
 	if resp.Error != nil {

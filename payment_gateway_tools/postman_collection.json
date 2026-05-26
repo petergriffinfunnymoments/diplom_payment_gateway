@@ -208,6 +208,12 @@
           "        <tr><td>Participant Bank</td><td>{{txParticipantBank}}</td></tr>",
           "        <tr><td>Schema Version</td><td>{{txSchemaVersion}}</td></tr>",
           "        <tr><td>Settlement Hint</td><td>{{txSettlementHint}}</td></tr>",
+          "        <tr><td>Money Mark</td><td>{{txMoneyMark}}</td></tr>",
+          "        <tr><td>Smart Contract ID</td><td>{{txSmartContractId}}</td></tr>",
+          "        <tr><td>Smart Contract Result</td><td>{{txSmartContractResult}}</td></tr>",
+          "        <tr><td>Smart Contract Reason</td><td>{{txSmartContractReason}}</td></tr>",
+          "        <tr><td>Platform Message ID</td><td>{{txPlatformMessageId}}</td></tr>",
+          "        <tr><td>Platform Transport</td><td>{{txPlatformTransport}}</td></tr>",
           "        <tr><td>QR ID</td><td>{{txQrId}}</td></tr>",
           "        <tr><td>QR Expires At</td><td>{{txQrExpiresAt}}</td></tr>",
           "        <tr><td>QR Image</td><td>{{{txQrImage}}}</td></tr>",
@@ -447,6 +453,12 @@
           "      txParticipantBank: valueOrNA(tx.participant_bank),",
           "      txSchemaVersion: valueOrNA(tx.schema_version),",
           "      txSettlementHint: valueOrNA(tx.settlement_hint),",
+          "      txMoneyMark: valueOrNA(tx.money_mark),",
+          "      txSmartContractId: valueOrNA(tx.smart_contract_id),",
+          "      txSmartContractResult: valueOrNA(tx.smart_contract_result),",
+          "      txSmartContractReason: valueOrNA(tx.smart_contract_reason),",
+          "      txPlatformMessageId: valueOrNA(tx.platform_message_id),",
+          "      txPlatformTransport: valueOrNA(tx.platform_transport),",
           "      txQrId: valueOrNA(tx.qr_id),",
           "      txQrExpiresAt: valueOrNA(tx.qr_expires_at),",
           "      txQrImage: qrImageOrNA(tx.qr_image_data_uri),",
@@ -676,6 +688,12 @@
                   "}",
                   "if (json.transaction_details && json.transaction_details.qr_image_data_uri) {",
                   "  pm.environment.set('digital_ruble_qr_image_data_uri', json.transaction_details.qr_image_data_uri);",
+                  "}",
+                  "if (json.transaction_details && json.transaction_details.platform_message_id) {",
+                  "  pm.environment.set('digital_ruble_platform_message_id', json.transaction_details.platform_message_id);",
+                  "}",
+                  "if (json.transaction_details && json.transaction_details.money_mark) {",
+                  "  pm.environment.set('digital_ruble_money_mark', json.transaction_details.money_mark);",
                   "}"
                 ]
               }
@@ -691,7 +709,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"current_status\": \"CREATED\",\n  \"payment_info\": {\n    \"amount\": {\n      \"value\": 1500,\n      \"currency\": \"RUB\"\n    },\n    \"payment_method_data\": {\n      \"type\": \"Цифровой рубль\"\n    },\n    \"customer_data\": {\n      \"email\": \"customer@example.com\",\n      \"phone\": \"+79991234567\",\n      \"digital_ruble_wallet_id\": \"dr_wallet_123\",\n      \"digital_ruble_account\": \"0000000000000000000000000000000000\",\n      \"digital_ruble_identifier\": \"merchant:wallet:demo\"\n    },\n    \"description\": \"Оплата заказа Postman Digital Ruble\",\n    \"created_at\": \"{{created_at}}\"\n  }\n}"
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"idempotency_key\": \"{{idempotency_key}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"current_status\": \"CREATED\",\n  \"payment_info\": {\n    \"amount\": {\n      \"value\": 1500,\n      \"currency\": \"RUB\"\n    },\n    \"payment_method_data\": {\n      \"type\": \"Цифровой рубль\"\n    },\n    \"customer_data\": {\n      \"email\": \"customer@example.com\",\n      \"phone\": \"+79991234567\",\n      \"digital_ruble_wallet_id\": \"dr_wallet_123\",\n      \"digital_ruble_account\": \"0000000000000000000000000000000000\",\n      \"digital_ruble_identifier\": \"merchant:wallet:demo\"\n    },\n    \"items\": [\n      {\n        \"name\": \"Учебник по программированию\",\n        \"price\": 1500,\n        \"quantity\": 1,\n        \"category\": \"education\"\n      }\n    ],\n    \"digital_ruble_data\": {\n      \"smart_contract_id\": \"SC_MARKED_MONEY_V1\",\n      \"require_marked_money\": true\n    },\n    \"description\": \"Оплата заказа Postman Digital Ruble\",\n    \"created_at\": \"{{created_at}}\"\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/payments",
@@ -729,7 +747,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"qr_id\": \"{{digital_ruble_qr_id}}\",\n  \"result\": \"captured\"\n}"
+              "raw": "{\n  \"merchant_id\": \"{{merchant_id}}\",\n  \"payment_id\": \"{{payment_id}}\",\n  \"qr_id\": \"{{digital_ruble_qr_id}}\",\n  \"payer_wallet_id\": \"dr_wallet_123\",\n  \"result\": \"captured\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/sandbox/digital-ruble/scan",
@@ -740,6 +758,50 @@
                 "sandbox",
                 "digital-ruble",
                 "scan"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /sandbox/digital-ruble/soap - SOAP-проверка маркировки",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('SOAP emulator returned XML', function () {",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/xml');",
+                  "});",
+                  "",
+                  "pm.test('Smart contract passed', function () {",
+                  "  pm.expect(pm.response.text()).to.include('<Result>PASSED</Result>');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Envelope xmlns=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <Body>\n    <BusinessEnvelope>\n      <MessageID>msg_postman_{{$timestamp}}</MessageID>\n      <MessageType>C2BPaymentCheck</MessageType>\n      <Sender>PAYMENT_GATEWAY</Sender>\n      <Receiver>DIGITAL_RUBLE_PLATFORM_EMULATOR</Receiver>\n      <SigContainer>\n        <SignatureType>HMAC-SHA256-EMULATION</SignatureType>\n        <SignatureValue>postman-demo-signature</SignatureValue>\n      </SigContainer>\n      <Object>\n        <PaymentID>{{payment_id}}</PaymentID>\n        <MerchantID>{{merchant_id}}</MerchantID>\n        <WalletID>dr_wallet_123</WalletID>\n        <Amount>1500.00</Amount>\n        <Currency>RUB</Currency>\n        <Category>education</Category>\n        <RequiredMoneyMark>EDUCATION</RequiredMoneyMark>\n        <SmartContractID>SC_MARKED_MONEY_V1</SmartContractID>\n      </Object>\n    </BusinessEnvelope>\n  </Body>\n</Envelope>"
+            },
+            "url": {
+              "raw": "{{base_url}}/sandbox/digital-ruble/soap",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sandbox",
+                "digital-ruble",
+                "soap"
               ]
             }
           }

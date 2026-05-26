@@ -8,6 +8,7 @@ import (
 
 	"payment-gateway/internal/contracts"
 	"payment-gateway/internal/dto"
+	"payment-gateway/internal/subsystems/digitalruble"
 )
 
 type DigitalRubleSandboxHandler struct {
@@ -25,11 +26,12 @@ func NewDigitalRubleSandboxHandler(store contracts.TransactionStore, logger cont
 }
 
 type digitalRubleSandboxRequest struct {
-	MerchantID string `json:"merchant_id"`
-	PaymentID  string `json:"payment_id"`
-	QRID       string `json:"qr_id"`
-	Result     string `json:"result"`
-	Reason     string `json:"reason"`
+	MerchantID    string `json:"merchant_id"`
+	PaymentID     string `json:"payment_id"`
+	QRID          string `json:"qr_id"`
+	PayerWalletID string `json:"payer_wallet_id"`
+	Result        string `json:"result"`
+	Reason        string `json:"reason"`
 }
 
 func (h *DigitalRubleSandboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +50,7 @@ func (h *DigitalRubleSandboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 	req.MerchantID = strings.TrimSpace(req.MerchantID)
 	req.PaymentID = strings.TrimSpace(req.PaymentID)
 	req.QRID = strings.TrimSpace(req.QRID)
+	req.PayerWalletID = strings.TrimSpace(req.PayerWalletID)
 	req.Result = strings.ToLower(strings.TrimSpace(req.Result))
 	req.Reason = strings.TrimSpace(req.Reason)
 	if req.Result == "" {
@@ -88,6 +91,9 @@ func (h *DigitalRubleSandboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 		providerStatus = "qr_expired"
 		errCode = dto.ErrorDigitalRubleQRExpired
 		errMsg = "digital ruble QR code expired before confirmation"
+	}
+	if status == string(dto.StatusCaptured) && errCode == "" {
+		status, providerStatus, errCode, errMsg = h.checkDigitalRubleSmartContract(&resp, req.PayerWalletID)
 	}
 
 	resp.CurrentStatus = status
@@ -136,6 +142,8 @@ func (h *DigitalRubleSandboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 			"sandbox_result":  req.Result,
 			"qr_id":           resp.TransactionDetails.QRID,
 			"provider_status": providerStatus,
+			"money_mark":      resp.TransactionDetails.MoneyMark,
+			"smart_contract":  resp.TransactionDetails.SmartContractResult,
 		},
 	})
 
@@ -164,6 +172,54 @@ func (h *DigitalRubleSandboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *DigitalRubleSandboxHandler) checkDigitalRubleSmartContract(resp *dto.PaymentResponse, payerWalletID string) (status string, providerStatus string, errCode string, errMsg string) {
+	payerWalletID = digitalRublePayerWalletID(payerWalletID, *resp)
+	messageID := resp.TransactionDetails.PlatformMessageID
+	check := digitalruble.PaymentCheckFromResponse(*resp, payerWalletID, messageID)
+
+	soapRequest, err := digitalruble.BuildPaymentCheckSOAP(check)
+	if err != nil {
+		resp.TransactionDetails.SmartContractResult = "ERROR"
+		resp.TransactionDetails.SmartContractReason = err.Error()
+		return string(dto.StatusFailed), "soap_message_build_failed", dto.ErrorDigitalRubleSOAP, err.Error()
+	}
+
+	checkResult, _, err := digitalruble.ProcessPaymentCheckSOAP(soapRequest)
+	if err != nil {
+		resp.TransactionDetails.SmartContractResult = "ERROR"
+		resp.TransactionDetails.SmartContractReason = err.Error()
+		return string(dto.StatusFailed), "soap_message_processing_failed", dto.ErrorDigitalRubleSOAP, err.Error()
+	}
+
+	resp.TransactionDetails.MoneyMark = checkResult.MoneyMark
+	resp.TransactionDetails.SmartContractID = checkResult.SmartContractID
+	resp.TransactionDetails.SmartContractResult = checkResult.Result
+	resp.TransactionDetails.SmartContractReason = checkResult.Reason
+	resp.TransactionDetails.PlatformMessageID = checkResult.MessageID
+	resp.TransactionDetails.PlatformTransport = digitalruble.PlatformTransportSOAP
+	resp.TransactionDetails.PlatformSignatureType = digitalruble.SignatureTypeHMAC
+
+	if !checkResult.Allowed {
+		return string(dto.StatusDeclined), "smart_contract_rejected", dto.ErrorDigitalRubleMarkFailed, checkResult.Reason
+	}
+	return string(dto.StatusCaptured), "settled", "", ""
+}
+
+func digitalRublePayerWalletID(value string, resp dto.PaymentResponse) string {
+	if strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	customer := resp.PaymentInfo.CustomerData
+	switch {
+	case strings.TrimSpace(customer.DigitalRubleWalletID) != "":
+		return strings.TrimSpace(customer.DigitalRubleWalletID)
+	case strings.TrimSpace(customer.DigitalRubleIdentifier) != "":
+		return strings.TrimSpace(customer.DigitalRubleIdentifier)
+	default:
+		return strings.TrimSpace(customer.DigitalWalletID)
+	}
 }
 
 func digitalRubleSandboxResult(result string, reason string) (status string, providerStatus string, errCode string, errMsg string) {

@@ -198,6 +198,7 @@ func main() {
 	mux.Handle("/webhooks/payanyway", providerWebhook(webhooks.NewPayAnyWayWebhookHandler(store, eventLogger, notificationService)))
 	digitalRubleSandboxHandler := providerWebhook(webhooks.NewDigitalRubleSandboxHandler(store, eventLogger, notificationService))
 	mux.Handle("/sandbox/digital-ruble/scan", digitalRubleSandboxHandler)
+	mux.Handle("/sandbox/digital-ruble/soap", providerWebhook(webhooks.NewDigitalRubleSOAPHandler()))
 	mux.Handle("/webhooks/digital-ruble", digitalRubleSandboxHandler)
 	mux.Handle("/merchant/webhook", webhooks.NewMerchantDemoWebhookHandler(eventLogger))
 

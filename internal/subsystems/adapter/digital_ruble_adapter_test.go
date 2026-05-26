@@ -35,6 +35,15 @@ func TestDigitalRubleAdapterReturnsPendingQRCode(t *testing.T) {
 	if !strings.Contains(result.QRPayload, "rail=DIGITAL_RUBLE") {
 		t.Fatalf("unexpected qr payload: %s", result.QRPayload)
 	}
+	if result.MoneyMark != "EDUCATION" {
+		t.Fatalf("expected EDUCATION money mark, got %s", result.MoneyMark)
+	}
+	if result.SmartContractID != "SC_MARKED_MONEY_V1" {
+		t.Fatalf("expected default smart contract id, got %s", result.SmartContractID)
+	}
+	if result.PlatformTransport == "" || result.PlatformSignatureType == "" {
+		t.Fatalf("expected SOAP platform metadata: %+v", result)
+	}
 }
 
 func digitalRubleRequest(walletID string) dto.CreatePaymentRequest {
@@ -55,6 +64,17 @@ func digitalRubleRequest(walletID string) dto.CreatePaymentRequest {
 				DigitalRubleWalletID:   walletID,
 				DigitalRubleAccount:    "0000000000000000000000000000000000",
 				DigitalRubleIdentifier: "merchant:wallet:demo",
+			},
+			Items: []dto.PaymentItem{
+				{
+					Name:     "Учебник",
+					Price:    1500,
+					Quantity: 1,
+					Category: "education",
+				},
+			},
+			DigitalRubleData: dto.DigitalRubleData{
+				RequireMarkedMoney: true,
 			},
 			CreatedAt:   time.Now().UTC(),
 			Description: "digital ruble test payment",

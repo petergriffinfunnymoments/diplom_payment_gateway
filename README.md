@@ -617,6 +617,35 @@ pgrouteadd "merchant_12345" "СБП" payanyway 0 PAYANYWAY
 
 Также поддерживаются `digital_ruble_identifier` и совместимый fallback `digital_wallet_id`.
 
+Для демонстрации маркировки цифровых рублей и простого смарт-контракта интернет-магазин может передать категорию товара и параметры цифрового рубля:
+
+```json
+{
+  "items": [
+    {
+      "name": "Учебник по программированию",
+      "price": 1500,
+      "quantity": 1,
+      "category": "education"
+    }
+  ],
+  "digital_ruble_data": {
+    "smart_contract_id": "SC_MARKED_MONEY_V1",
+    "require_marked_money": true
+  }
+}
+```
+
+Эмулятор сопоставляет категорию с маркировкой денег:
+
+```text
+education -> EDUCATION
+medicine  -> HEALTHCARE
+food      -> SOCIAL_FOOD
+transport -> TRANSPORT
+general   -> GENERAL
+```
+
 Создание платежа цифровым рублем всегда возвращает QR и статус ожидания:
 
 ```text
@@ -635,7 +664,11 @@ provider_status = qr_issued
   "qr_expires_at": "...",
   "participant_bank": "BANK_PARTNER_1",
   "schema_version": "drub.v1",
-  "settlement_hint": "RUB + DIGITAL_RUBLE; settlement through participant bank emulator"
+  "settlement_hint": "RUB + DIGITAL_RUBLE; settlement through participant bank emulator",
+  "money_mark": "EDUCATION",
+  "smart_contract_id": "SC_MARKED_MONEY_V1",
+  "smart_contract_result": "PENDING",
+  "platform_transport": "SOAP/XML sandbox"
 }
 ```
 
@@ -654,6 +687,7 @@ POST /sandbox/digital-ruble/scan
   "merchant_id": "merchant_12345",
   "payment_id": "pay_...",
   "qr_id": "drqr_...",
+  "payer_wallet_id": "dr_wallet_123",
   "result": "captured"
 }
 ```
@@ -668,6 +702,54 @@ expired  -> CANCELLED
 ```
 
 Если QR уже истёк, попытка `captured` завершится `CANCELLED` с ошибкой `DIGITAL_RUBLE_QR_EXPIRED`.
+
+При `captured` scan endpoint дополнительно формирует SOAP/XML-сообщение `C2BPaymentCheck` и передает его в эмулятор платформы цифрового рубля. Эмулятор проверяет, хватает ли в кошельке покупателя цифровых рублей с нужной маркировкой. Демо-кошельки:
+
+```text
+dr_wallet_123                 -> хватает EDUCATION/HEALTHCARE/SOCIAL_FOOD/TRANSPORT/GENERAL
+dr_wallet_no_mark             -> есть только GENERAL, платеж education будет DECLINED
+dr_wallet_insufficient_marked -> EDUCATION есть, но меньше суммы платежа
+dr_wallet_healthcare          -> хватает HEALTHCARE
+```
+
+Если маркировка не подходит или маркированного остатка недостаточно, платеж получает `DECLINED`, `provider_status=smart_contract_rejected`, а ошибка будет `DIGITAL_RUBLE_MARK_RESTRICTION_FAILED`.
+
+SOAP-эмулятор платформы можно вызвать напрямую:
+
+```text
+POST /sandbox/digital-ruble/soap
+Content-Type: text/xml
+```
+
+Пример XML:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Envelope xmlns="http://schemas.xmlsoap.org/soap/envelope/">
+  <Body>
+    <BusinessEnvelope>
+      <MessageID>msg_demo</MessageID>
+      <MessageType>C2BPaymentCheck</MessageType>
+      <Sender>PAYMENT_GATEWAY</Sender>
+      <Receiver>DIGITAL_RUBLE_PLATFORM_EMULATOR</Receiver>
+      <SigContainer>
+        <SignatureType>HMAC-SHA256-EMULATION</SignatureType>
+        <SignatureValue>demo</SignatureValue>
+      </SigContainer>
+      <Object>
+        <PaymentID>pay_demo</PaymentID>
+        <MerchantID>merchant_12345</MerchantID>
+        <WalletID>dr_wallet_123</WalletID>
+        <Amount>1500.00</Amount>
+        <Currency>RUB</Currency>
+        <Category>education</Category>
+        <RequiredMoneyMark>EDUCATION</RequiredMoneyMark>
+        <SmartContractID>SC_MARKED_MONEY_V1</SmartContractID>
+      </Object>
+    </BusinessEnvelope>
+  </Body>
+</Envelope>
+```
 
 Опциональные переменные:
 

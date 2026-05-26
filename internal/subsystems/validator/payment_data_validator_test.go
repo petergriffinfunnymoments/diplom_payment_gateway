@@ -73,6 +73,22 @@ func TestValidateAllowsReceiptItems(t *testing.T) {
 	}
 }
 
+func TestValidateAllowsDigitalRubleMarkedMoneyData(t *testing.T) {
+	v := NewPaymentDataValidator()
+	req := validDigitalRubleRequest()
+
+	validated, err := v.Validate(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if validated.PaymentInfo.Items[0].Category != "education" {
+		t.Fatalf("expected normalized category education, got %s", validated.PaymentInfo.Items[0].Category)
+	}
+	if validated.PaymentInfo.DigitalRubleData.SmartContractID != "SC_MARKED_MONEY_V1" {
+		t.Fatalf("expected smart contract data to be preserved")
+	}
+}
+
 func validCardRequest() dto.CreatePaymentRequest {
 	return dto.CreatePaymentRequest{
 		MerchantID:     "merchant_12345",
@@ -98,4 +114,26 @@ func validCardRequest() dto.CreatePaymentRequest {
 			Description: "Test card payment",
 		},
 	}
+}
+
+func validDigitalRubleRequest() dto.CreatePaymentRequest {
+	req := validCardRequest()
+	req.PaymentInfo.PaymentMethodData.Type = dto.PaymentMethodDigitalRuble
+	req.PaymentInfo.CustomerData.CardNumber = ""
+	req.PaymentInfo.CustomerData.CardDate = ""
+	req.PaymentInfo.CustomerData.CvvCode = ""
+	req.PaymentInfo.CustomerData.DigitalRubleWalletID = "dr_wallet_123"
+	req.PaymentInfo.Items = []dto.PaymentItem{
+		{
+			Name:     "Учебник",
+			Price:    1500,
+			Quantity: 1,
+			Category: " Education ",
+		},
+	}
+	req.PaymentInfo.DigitalRubleData = dto.DigitalRubleData{
+		SmartContractID:    "SC_MARKED_MONEY_V1",
+		RequireMarkedMoney: true,
+	}
+	return req
 }

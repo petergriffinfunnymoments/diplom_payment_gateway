@@ -38,6 +38,8 @@ const (
 	ErrorDigitalRubleDeclined    = "DIGITAL_RUBLE_PAYMENT_DECLINED"
 	ErrorDigitalRubleTechnical   = "DIGITAL_RUBLE_TECHNICAL_ERROR"
 	ErrorDigitalRubleQRExpired   = "DIGITAL_RUBLE_QR_EXPIRED"
+	ErrorDigitalRubleMarkFailed  = "DIGITAL_RUBLE_MARK_RESTRICTION_FAILED"
+	ErrorDigitalRubleSOAP        = "DIGITAL_RUBLE_SOAP_ERROR"
 	ErrorBlockedByProviderFraud  = "BLOCKED_BY_PROVIDER_FRAUD"
 	ErrorDeclinedByProvider      = "DECLINED_BY_PROVIDER"
 
@@ -97,6 +99,8 @@ var gatewayErrorCatalog = []GatewayErrorDefinition{
 	{Code: ErrorDigitalRubleDeclined, Category: "provider", PaymentStatus: string(StatusDeclined), DefaultMessage: "digital ruble payment was declined", Description: "Эмулятор цифрового рубля отклонил платёж."},
 	{Code: ErrorDigitalRubleTechnical, Category: "provider", PaymentStatus: string(StatusFailed), Retryable: true, DefaultMessage: "digital ruble technical error", Description: "Эмулятор цифрового рубля вернул техническую ошибку."},
 	{Code: ErrorDigitalRubleQRExpired, Category: "provider", PaymentStatus: string(StatusCancelled), DefaultMessage: "digital ruble QR code expired", Description: "QR-код цифрового рубля истёк до подтверждения оплаты."},
+	{Code: ErrorDigitalRubleMarkFailed, Category: "provider", PaymentStatus: string(StatusDeclined), DefaultMessage: "marked digital ruble restriction failed", Description: "Смарт-контракт цифрового рубля отклонил платёж из-за неподходящей маркировки средств или недостаточного маркированного остатка."},
+	{Code: ErrorDigitalRubleSOAP, Category: "provider", PaymentStatus: string(StatusFailed), Retryable: true, DefaultMessage: "digital ruble SOAP emulator failed", Description: "SOAP-эмулятор платформы цифрового рубля не смог обработать сообщение."},
 	{Code: ErrorBlockedByProviderFraud, Category: "provider", PaymentStatus: string(StatusDeclined), DefaultMessage: "payment blocked by provider antifraud", Description: "Внешний провайдер отклонил платёж по антифрод-причине."},
 	{Code: ErrorDeclinedByProvider, Category: "provider", PaymentStatus: string(StatusDeclined), DefaultMessage: "payment declined by provider", Description: "Общий provider-level отказ без антифрод-признака."},
 

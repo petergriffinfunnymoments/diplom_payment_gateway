@@ -84,6 +84,7 @@ type paymentInfoValidationModel struct {
 	PaymentMethodData paymentMethodDataValidationModel `validate:"required"`
 	CustomerData      customerDataValidationModel      `validate:"required"`
 	Items             []paymentItemValidationModel     `validate:"omitempty,dive"`
+	DigitalRubleData  digitalRubleDataValidationModel  `validate:"omitempty"`
 	CreatedAt         time.Time                        `validate:"required"`
 	Description       string                           `validate:"required,min=3,max=255"`
 }
@@ -113,10 +114,15 @@ type paymentItemValidationModel struct {
 	Name          string  `validate:"required,min=1,max=128"`
 	Price         float64 `validate:"required,gt=0,lte=1000000"`
 	Quantity      float64 `validate:"required,gt=0,lte=100000"`
+	Category      string  `validate:"omitempty,max=64"`
 	VATTag        string  `validate:"omitempty,max=32"`
 	PaymentMethod string  `validate:"omitempty,max=32"`
 	PaymentObject string  `validate:"omitempty,max=32"`
 	IDInternal    string  `validate:"omitempty,max=64"`
+}
+
+type digitalRubleDataValidationModel struct {
+	SmartContractID string `validate:"omitempty,max=64"`
 }
 
 func toValidationModel(req dto.CreatePaymentRequest) createPaymentValidationModel {
@@ -144,7 +150,10 @@ func toValidationModel(req dto.CreatePaymentRequest) createPaymentValidationMode
 				DigitalRubleAccount:    req.PaymentInfo.CustomerData.DigitalRubleAccount,
 				DigitalRubleIdentifier: req.PaymentInfo.CustomerData.DigitalRubleIdentifier,
 			},
-			Items:       toPaymentItemValidationModels(req.PaymentInfo.Items),
+			Items: toPaymentItemValidationModels(req.PaymentInfo.Items),
+			DigitalRubleData: digitalRubleDataValidationModel{
+				SmartContractID: req.PaymentInfo.DigitalRubleData.SmartContractID,
+			},
 			CreatedAt:   req.PaymentInfo.CreatedAt,
 			Description: req.PaymentInfo.Description,
 		},
@@ -161,6 +170,7 @@ func toPaymentItemValidationModels(items []dto.PaymentItem) []paymentItemValidat
 			Name:          item.Name,
 			Price:         item.Price,
 			Quantity:      item.Quantity,
+			Category:      item.Category,
 			VATTag:        item.VATTag,
 			PaymentMethod: item.PaymentMethod,
 			PaymentObject: item.PaymentObject,
@@ -193,11 +203,13 @@ func normalizeRequest(req dto.CreatePaymentRequest) dto.CreatePaymentRequest {
 	req.PaymentInfo.CustomerData = customer
 	for i := range req.PaymentInfo.Items {
 		req.PaymentInfo.Items[i].Name = strings.TrimSpace(req.PaymentInfo.Items[i].Name)
+		req.PaymentInfo.Items[i].Category = strings.ToLower(strings.TrimSpace(req.PaymentInfo.Items[i].Category))
 		req.PaymentInfo.Items[i].VATTag = strings.TrimSpace(req.PaymentInfo.Items[i].VATTag)
 		req.PaymentInfo.Items[i].PaymentMethod = strings.TrimSpace(req.PaymentInfo.Items[i].PaymentMethod)
 		req.PaymentInfo.Items[i].PaymentObject = strings.TrimSpace(req.PaymentInfo.Items[i].PaymentObject)
 		req.PaymentInfo.Items[i].IDInternal = strings.TrimSpace(req.PaymentInfo.Items[i].IDInternal)
 	}
+	req.PaymentInfo.DigitalRubleData.SmartContractID = strings.TrimSpace(req.PaymentInfo.DigitalRubleData.SmartContractID)
 
 	return req
 }
@@ -418,6 +430,10 @@ func jsonFieldName(namespace string) string {
 		"DigitalRubleWalletID":         "digital_ruble_wallet_id",
 		"DigitalRubleAccount":          "digital_ruble_account",
 		"DigitalRubleIdentifier":       "digital_ruble_identifier",
+		"Items":                        "items",
+		"Category":                     "category",
+		"DigitalRubleData":             "digital_ruble_data",
+		"SmartContractID":              "smart_contract_id",
 		"CreatedAt":                    "created_at",
 		"Description":                  "description",
 	}

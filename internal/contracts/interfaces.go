@@ -98,6 +98,13 @@ type AdapterResult struct {
 	ParticipantBank       string
 	SchemaVersion         string
 	SettlementHint        string
+	MoneyMark             string
+	SmartContractID       string
+	SmartContractResult   string
+	SmartContractReason   string
+	PlatformMessageID     string
+	PlatformTransport     string
+	PlatformSignatureType string
 	ErrorMessage          string
 }
 

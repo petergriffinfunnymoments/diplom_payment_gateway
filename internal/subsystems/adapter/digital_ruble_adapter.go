@@ -12,6 +12,7 @@ import (
 
 	"payment-gateway/internal/contracts"
 	"payment-gateway/internal/dto"
+	"payment-gateway/internal/subsystems/digitalruble"
 
 	qrcode "github.com/skip2/go-qrcode"
 )
@@ -55,6 +56,8 @@ func (a *DigitalRubleAdapter) Send(ctx context.Context, token string, req dto.Cr
 	qrID := fmt.Sprintf("drqr_%d", time.Now().UnixNano())
 	externalID := fmt.Sprintf("drub_%d", time.Now().UnixNano())
 	expiresAt := time.Now().UTC().Add(a.qrTTL)
+	platformMessageID := digitalruble.NewMessageID()
+	check := digitalruble.PaymentCheckFromCreateRequest(req, walletID, platformMessageID)
 
 	qrPayload := a.qrPayload(qrID, req, walletID)
 	return contracts.AdapterResult{
@@ -70,6 +73,13 @@ func (a *DigitalRubleAdapter) Send(ctx context.Context, token string, req dto.Cr
 		ParticipantBank:       a.participantBank,
 		SchemaVersion:         a.schemaVersion,
 		SettlementHint:        "RUB + DIGITAL_RUBLE; settlement through participant bank emulator",
+		MoneyMark:             check.MoneyMark,
+		SmartContractID:       check.SmartContractID,
+		SmartContractResult:   "PENDING",
+		SmartContractReason:   "will be checked by digital ruble platform emulator after QR scan",
+		PlatformMessageID:     platformMessageID,
+		PlatformTransport:     digitalruble.PlatformTransportSOAP,
+		PlatformSignatureType: digitalruble.SignatureTypeHMAC,
 	}, nil
 }
 
@@ -108,6 +118,9 @@ func (a *DigitalRubleAdapter) qrPayload(qrID string, req dto.CreatePaymentReques
 	values.Set("payer_wallet", walletID)
 	values.Set("recipient_account", strings.TrimSpace(req.PaymentInfo.CustomerData.DigitalRubleAccount))
 	values.Set("recipient_identifier", strings.TrimSpace(req.PaymentInfo.CustomerData.DigitalRubleIdentifier))
+	values.Set("item_category", digitalruble.PrimaryCategory(req.PaymentInfo.Items))
+	values.Set("required_money_mark", digitalruble.RequiredMoneyMark(digitalruble.PrimaryCategory(req.PaymentInfo.Items)))
+	values.Set("smart_contract_id", digitalruble.SmartContractID(req.PaymentInfo.DigitalRubleData.SmartContractID))
 	values.Set("purpose", truncate(req.PaymentInfo.Description, 140))
 	return "drub://" + values.Encode()
 }

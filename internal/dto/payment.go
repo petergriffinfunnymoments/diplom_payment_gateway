@@ -30,10 +30,19 @@ type PaymentItem struct {
 	Name          string  `json:"name"`
 	Price         float64 `json:"price"`
 	Quantity      float64 `json:"quantity"`
+	Category      string  `json:"category,omitempty"`
 	VATTag        string  `json:"vat_tag,omitempty"`
 	PaymentMethod string  `json:"payment_method,omitempty"`
 	PaymentObject string  `json:"payment_object,omitempty"`
 	IDInternal    string  `json:"id_internal,omitempty"`
+}
+
+// DigitalRubleData содержит дополнительные параметры сценария цифрового рубля.
+// В прототипе они используются эмулятором платформы для проверки маркировки денег
+// и учебного смарт-контракта целевого расходования.
+type DigitalRubleData struct {
+	SmartContractID    string `json:"smart_contract_id,omitempty"`
+	RequireMarkedMoney bool   `json:"require_marked_money,omitempty"`
 }
 
 // CustomerData — данные клиента (в зависимости от типа оплаты набор полей может отличаться).
@@ -69,6 +78,7 @@ type PaymentInfo struct {
 	PaymentMethodData PaymentMethodData `json:"payment_method_data"`
 	CustomerData      CustomerData      `json:"customer_data"`
 	Items             []PaymentItem     `json:"items,omitempty"`
+	DigitalRubleData  DigitalRubleData  `json:"digital_ruble_data,omitempty"`
 	CreatedAt         time.Time         `json:"created_at"`
 	Description       string            `json:"description"`
 }
@@ -91,6 +101,7 @@ type PaymentInfoResponse struct {
 	PaymentMethodData PaymentMethodData `json:"payment_method_data"`
 	CustomerData      CustomerData      `json:"customer_data"`
 	Items             []PaymentItem     `json:"items,omitempty"`
+	DigitalRubleData  DigitalRubleData  `json:"digital_ruble_data,omitempty"`
 	Description       string            `json:"description"`
 	CreatedAt         time.Time         `json:"created_at"`
 	UpdatedAt         time.Time         `json:"updated_at"`
@@ -112,6 +123,13 @@ type TransactionDetails struct {
 	ParticipantBank       string `json:"participant_bank,omitempty"`
 	SchemaVersion         string `json:"schema_version,omitempty"`
 	SettlementHint        string `json:"settlement_hint,omitempty"`
+	MoneyMark             string `json:"money_mark,omitempty"`
+	SmartContractID       string `json:"smart_contract_id,omitempty"`
+	SmartContractResult   string `json:"smart_contract_result,omitempty"`
+	SmartContractReason   string `json:"smart_contract_reason,omitempty"`
+	PlatformMessageID     string `json:"platform_message_id,omitempty"`
+	PlatformTransport     string `json:"platform_transport,omitempty"`
+	PlatformSignatureType string `json:"platform_signature_type,omitempty"`
 	Token                 string `json:"token,omitempty"`
 	TokenPreview          string `json:"token_preview,omitempty"`
 	FraudCheckResult      string `json:"fraud_check_result"`
