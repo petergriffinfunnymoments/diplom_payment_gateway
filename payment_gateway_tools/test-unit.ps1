@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string[]]$Package = @(
         "./internal/dto",
         "./internal/subsystems/validator",

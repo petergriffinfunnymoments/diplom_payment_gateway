@@ -127,7 +127,7 @@ func (a *YooKassaAdapter) Refund(ctx context.Context, req contracts.RefundReques
 }
 
 func (a *YooKassaAdapter) Send(ctx context.Context, token string, req dto.CreatePaymentRequest) (contracts.AdapterResult, error) {
-	_ = token // внутренний токен шлюза не отправляем во внешнюю платежную форму
+	_ = token
 
 	body := map[string]any{
 		"amount": map[string]string{

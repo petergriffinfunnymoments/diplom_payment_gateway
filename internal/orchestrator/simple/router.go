@@ -28,11 +28,6 @@ func (r *simplePaymentRouter) Route(
 ) (paymentSystem string, adapterKey string, err error) {
 	_ = fraud
 
-	// Правило маршрутизации по платёжной системе карты.
-	// Для дипломного прототипа используем упрощённое определение по BIN/IIN:
-	// МИР -> YooKassa. Остальные карты идут через таблицу merchant_payment_routes или env-provider.
-	// Если номер карты отсутствует или платёжная система не распознана,
-	// ниже сработает обычная маршрутизация по таблице merchant_payment_routes.
 	if req.PaymentInfo.PaymentMethodData.Type == dto.PaymentMethodCard {
 		cardScheme := detectCardScheme(req.PaymentInfo.CustomerData.CardNumber)
 		if ps, key, ok := providerForCardScheme(cardScheme); ok {
@@ -46,14 +41,11 @@ func (r *simplePaymentRouter) Route(
 			return "", "", fmt.Errorf("failed to load payment route: %w", err)
 		}
 		if found {
-			// Здесь маршрутизатор сам выбирает внешний provider для конкретного мерчанта и способа оплаты.
-			// adapterKey = provider: yookassa / robokassa / payanyway / simulated и т.д.
+
 			return route.PaymentSystem, strings.ToLower(strings.TrimSpace(route.Provider)), nil
 		}
 	}
 
-	// Fallback для разработки: если маршрута в БД нет, используем старую логику.
-	// В этом режиме Factory может взять provider из переменных окружения.
 	switch req.PaymentInfo.PaymentMethodData.Type {
 	case dto.PaymentMethodSBP:
 		return "SBP", "sbp_adapter", nil

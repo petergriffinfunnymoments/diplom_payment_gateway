@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string[]]$Package = @("./..."),
     [string]$Benchmark = ".",
     [string]$Benchtime = "3s",

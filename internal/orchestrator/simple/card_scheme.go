@@ -12,8 +12,6 @@ const (
 	cardSchemeMastercard = "MASTERCARD"
 )
 
-// detectCardScheme определяет платёжную систему карты по первым цифрам номера.
-// Это учебная BIN/IIN-маршрутизация: для промышленного шлюза лучше подключать полноценную BIN-базу.
 func detectCardScheme(cardNumber string) string {
 	digits := onlyDigits(cardNumber)
 	if len(digits) < 4 {

@@ -1,8 +1,4 @@
-# Служебные команды настройки маршрутизации платежей.
-# Подключение:
-# . .\payment_gateway_tools\pg-tools.ps1
-# . .\payment_gateway_tools\payment-route-tools.ps1
-
+﻿
 function Get-PaymentGatewayDbUrl {
     if ($env:DATABASE_URL -and $env:DATABASE_URL.Trim() -ne "") {
         return $env:DATABASE_URL
@@ -56,7 +52,7 @@ function pgrouteadd {
         [string]$PaymentMethod,
 
         [Parameter(Mandatory=$true)]
-        [ValidateSet("yookassa", "robokassa", "payanyway", "simulated", "digital_ruble")]
+        [ValidateSet("yookassa", "payanyway", "simulated", "digital_ruble")]
         [string]$Provider,
 
         [int]$Priority = 1,

@@ -29,14 +29,10 @@ var (
 	drAccountRegexp    = regexp.MustCompile(`^[A-Za-z0-9]{1,34}$`)
 )
 
-// PaymentDataValidator — реальный модуль валидации платежных данных.
-// Он проверяет общую структуру запроса и метод-специфичные поля:
-// СБП, банковская карта, цифровой кошелёк.
 type PaymentDataValidator struct {
 	validate *playground.Validate
 }
 
-// NewPaymentDataValidator создаёт валидатор на базе github.com/go-playground/validator/v10.
 func NewPaymentDataValidator() contracts.PaymentValidator {
 	v := playground.New()
 
@@ -270,7 +266,7 @@ func validateCardExpiration(fl playground.FieldLevel) bool {
 	year := 2000 + atoi(parts[1])
 
 	now := time.Now().UTC()
-	// Карта действительна до конца указанного месяца.
+
 	expiration := time.Date(year, time.Month(month)+1, 1, 0, 0, 0, 0, time.UTC).Add(-time.Nanosecond)
 	return expiration.After(now)
 }

@@ -1,7 +1,4 @@
-# Safe launcher for payment-gateway.
-# This file is safe to commit: it contains no real secrets.
-# Put real local values in payment_gateway_tools/run.local.ps1.
-
+﻿
 $ErrorActionPreference = "Stop"
 
 $LocalConfig = Join-Path $PSScriptRoot "run.local.ps1"

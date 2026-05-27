@@ -22,8 +22,6 @@ type PostgresTokenizer struct {
 	ttl  time.Duration
 }
 
-// NewPostgresTokenizer создаёт токенизатор, который генерирует токен и сохраняет
-// в PostgreSQL только безопасное представление: hash токена, preview и маску реквизита.
 func NewPostgresTokenizer(ctx context.Context, dsn string) (contracts.Tokenizer, error) {
 	if dsn == "" {
 		return nil, errors.New("dsn is empty")

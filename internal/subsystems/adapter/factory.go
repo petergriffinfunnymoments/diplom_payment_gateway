@@ -26,10 +26,6 @@ func NewFactoryFromEnv() *Factory {
 		f.Register("yookassa", a)
 	}
 
-	if a, err := NewRobokassaAdapterFromEnv(); err == nil {
-		f.Register("robokassa", a)
-	}
-
 	if a, err := NewPayAnyWayAdapterFromEnv(); err == nil {
 		f.Register("payanyway", a)
 	}
@@ -56,13 +52,9 @@ func (f *Factory) Get(key string) (contracts.PaymentAdapter, bool) {
 	return a, ok
 }
 
-// Resolve возвращает конкретный адаптер.
-// Если маршрутизатор уже выбрал provider (например, yookassa или payanyway), фабрика просто возвращает
-// соответствующую реализацию. Для старых adapterKey вида card_adapter сохраняется fallback через env.
 func (f *Factory) Resolve(adapterKey string, paymentSystem string) (contracts.PaymentAdapter, string, error) {
 	key := normalizeAdapterKey(adapterKey)
 
-	// Новый режим: router возвращает provider напрямую.
 	if key != "" && !isLegacyAdapterKey(key) {
 		if a, ok := f.Get(key); ok {
 			return a, key, nil
@@ -70,7 +62,6 @@ func (f *Factory) Resolve(adapterKey string, paymentSystem string) (contracts.Pa
 		return nil, "", fmt.Errorf("adapter provider %q is not registered or not configured", key)
 	}
 
-	// Старый режим/fallback: выбираем provider из env.
 	providerKey := providerFromEnv(key, paymentSystem)
 	if providerKey == "" {
 		return nil, "", fmt.Errorf("payment provider is not configured for adapter key %q", adapterKey)

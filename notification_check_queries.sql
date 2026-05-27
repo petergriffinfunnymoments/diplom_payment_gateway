@@ -1,5 +1,4 @@
--- Последние доставки уведомлений интернет-магазину
-SELECT
+﻿SELECT
     created_at,
     delivery_id,
     merchant_id,
@@ -12,7 +11,6 @@ FROM notification_deliveries
 ORDER BY created_at DESC
 LIMIT 30;
 
--- Логи сервиса уведомлений
 SELECT
     le.timestamp,
     le.level,
@@ -28,7 +26,6 @@ WHERE s.code = 'notifications'
 ORDER BY le.timestamp DESC
 LIMIT 30;
 
--- История последней транзакции, включая уведомления
 SELECT
     le.timestamp,
     le.level,

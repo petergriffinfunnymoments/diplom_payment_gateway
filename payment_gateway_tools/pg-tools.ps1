@@ -1,11 +1,4 @@
-# ==============================
-# PostgreSQL helper commands
-# for payment gateway project
-# ==============================
-# Safe to commit: this file contains no real database password.
-# Put the real connection string in payment_gateway_tools/run.local.ps1
-# or set $env:PGURL in the current PowerShell session.
-
+﻿
 $PSQL = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
 
 if (-not (Test-Path $PSQL)) {

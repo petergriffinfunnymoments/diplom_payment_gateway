@@ -29,7 +29,6 @@ type SimpleOrchestrator struct {
 	store  contracts.TransactionStore
 	logger contracts.EventLogger
 
-	// containers (5)
 	stateManager contracts.TransactionStateManager
 	router       contracts.PaymentRouter
 	workflow     contracts.WorkflowEngine
@@ -37,8 +36,6 @@ type SimpleOrchestrator struct {
 	callback     contracts.CallbackHandler
 }
 
-// NewSimpleOrchestrator создаёт оркестратор платежей.
-// Если TransactionStore не передан, используется in-memory хранилище.
 func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestrator {
 	store := storage.NewInMemoryTransactionStore()
 	if len(stores) > 0 && stores[0] != nil {
@@ -48,14 +45,10 @@ func NewSimpleOrchestrator(stores ...contracts.TransactionStore) *SimpleOrchestr
 	return newSimpleOrchestrator(store, noOpLogger{}, nil, notifications.NewNoOpNotifications(), nil)
 }
 
-// NewSimpleOrchestratorWithLogger создаёт оркестратор с явной реализацией TransactionStore и EventLogger.
-// Его использует main.go, когда PostgreSQL уже подключён.
 func NewSimpleOrchestratorWithLogger(store contracts.TransactionStore, eventLogger contracts.EventLogger) *SimpleOrchestrator {
 	return NewSimpleOrchestratorWithDependencies(store, eventLogger, nil)
 }
 
-// NewSimpleOrchestratorWithDependencies создаёт оркестратор с явными реализациями зависимостей.
-// Это нужно, чтобы подключать реальные подсистемы: PostgreSQL-хранилище, логирование, токенизацию и т.д.
 func NewSimpleOrchestratorWithDependencies(
 	store contracts.TransactionStore,
 	eventLogger contracts.EventLogger,
@@ -65,8 +58,6 @@ func NewSimpleOrchestratorWithDependencies(
 	return NewSimpleOrchestratorWithServices(store, eventLogger, tokenizerService, nil, adapterFactories...)
 }
 
-// NewSimpleOrchestratorWithServices создаёт оркестратор с явно переданными реализациями подсистем.
-// Используется, когда подключены PostgreSQL-хранилище, логирование, токенизация и сервис уведомлений.
 func NewSimpleOrchestratorWithServices(
 	store contracts.TransactionStore,
 	eventLogger contracts.EventLogger,
@@ -77,8 +68,6 @@ func NewSimpleOrchestratorWithServices(
 	return NewSimpleOrchestratorWithRouting(store, eventLogger, tokenizerService, notificationService, nil, adapterFactories...)
 }
 
-// NewSimpleOrchestratorWithRouting создаёт оркестратор с хранилищем правил маршрутизации.
-// Если routeStore передан, маршрутизатор выбирает адаптер по таблице merchant_payment_routes.
 func NewSimpleOrchestratorWithRouting(
 	store contracts.TransactionStore,
 	eventLogger contracts.EventLogger,
@@ -140,7 +129,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	}
 	safeReq := req.WithoutSensitiveAuthenticationData()
 
-	// 1) Idempotency: если этот idempotency_key уже был обработан — отдаём сохранённый response.
 	if status, payloadJSON, found, err := o.store.GetByIdempotencyKey(ctx, req.MerchantID, req.IdempotencyKey); err != nil {
 		return dto.PaymentResponse{}, err
 	} else if found {
@@ -175,7 +163,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		return cached.Sanitized(), nil
 	}
 
-	// 2) Workflow containers: start session / set status.
 	sessionID, err := o.workflow.StartSession(ctx, safeReq)
 	if err != nil {
 		return dto.PaymentResponse{}, err
@@ -194,7 +181,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		"description_len": strconv.Itoa(len(safeReq.PaymentInfo.Description)),
 	})
 
-	// 3) Validator.
 	validatedReq, err := o.validator.Validate(ctx, req)
 	if err != nil {
 		return o.failAndSave(ctx, safeReq, statusFailed, dto.ErrorValidation, err.Error(), "validator")
@@ -203,7 +189,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	_ = o.stateManager.SetStatus(ctx, validatedReq.MerchantID, validatedReq.PaymentID, statusPending)
 	_ = o.logEvent(ctx, validatedReq, contracts.EventPaymentValidated, contracts.LogLevelInfo, "validator", statusPending, "Payment request validated", nil)
 
-	// 4) AntiFraud.
 	fraudResult, err := o.antiFraud.Check(ctx, validatedReq)
 	if err != nil {
 		return o.failAndSave(ctx, validatedReq, statusFailed, dto.ErrorAntifraud, err.Error(), "antifraud")
@@ -220,13 +205,11 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		return o.failAndSave(ctx, validatedReq, statusDeclined, dto.ErrorAntifraudDeclined, msg, "antifraud")
 	}
 
-	// 5) Router.
 	paymentSystem, adapterKey, err := o.router.Route(ctx, validatedReq, fraudResult)
 	if err != nil {
 		return o.failAndSave(ctx, validatedReq, statusFailed, dto.ErrorRouting, err.Error(), "orchestrator")
 	}
 
-	// 6) Tokenization.
 	tok, err := o.tokenizer.Tokenize(ctx, validatedReq)
 	if err != nil {
 		return o.failAndSave(ctx, validatedReq, statusFailed, dto.ErrorTokenization, err.Error(), "tokenizer")
@@ -235,7 +218,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		"token_preview": paymentlogging.TokenPreview(tok),
 	})
 
-	// 7) Adapter + retry.
 	paymentAdapter, selectedProvider, err := o.adapterFactory.Resolve(adapterKey, paymentSystem)
 	if err != nil {
 		return o.failAndSave(ctx, validatedReq, statusFailed, dto.ErrorAdapterFactory, err.Error(), "adapter")
@@ -283,7 +265,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		time.Sleep(o.retry.RetryAfter(retryCount))
 	}
 
-	// 8) Callback handler: build gateway response.
 	resp, err := o.callback.HandleCallback(ctx, lastAdapterResult, validatedReq, tok)
 	if err != nil {
 		resp = buildErrorResponse(validatedReq, statusFailed, dto.ErrorCallback, err.Error())
@@ -295,7 +276,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 	_ = o.stateManager.SetStatus(ctx, req.MerchantID, req.PaymentID, finalStatus)
 	_ = o.workflow.CompleteSession(ctx, sessionID, finalStatus)
 
-	// 9) Response + merchant notifications.
 	_ = o.logEvent(ctx, validatedReq, contracts.EventPaymentResponseSent, contracts.LogLevelInfo, "orchestrator", finalStatus, "Payment response sent to merchant", map[string]string{
 		"retry_count": strconv.Itoa(retryCount),
 	})
@@ -305,7 +285,6 @@ func (o *SimpleOrchestrator) CreatePayment(ctx context.Context, req dto.CreatePa
 		})
 	}
 
-	// 10) Save for idempotency.
 	_ = o.store.Save(ctx, validatedReq.MerchantID, validatedReq.PaymentID, validatedReq.IdempotencyKey, resp.CurrentStatus, mustMarshalPaymentResponse(resp), nowUTC())
 
 	return resp, nil
@@ -327,9 +306,6 @@ func (o *SimpleOrchestrator) failAndSave(ctx context.Context, req dto.CreatePaym
 		"error_message": msg,
 	})
 
-	// Важно: уведомление интернет-магазину должно отправляться не только при ответе адаптера,
-	// но и при любом финальном отказе внутри шлюза: валидация, антифрод, токенизация, маршрутизация.
-	// Иначе транзакция и логи сохраняются, а таблица notification_deliveries остаётся пустой.
 	if err := o.notifications.Notify(ctx, resp); err != nil {
 		_ = o.logEvent(ctx, req, contracts.EventNotificationFailed, contracts.LogLevelWarn, "notifications", status, "Merchant notification failed", map[string]string{
 			"error_code":    code,

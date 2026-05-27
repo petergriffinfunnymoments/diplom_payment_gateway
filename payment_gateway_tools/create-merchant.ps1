@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)]
     [string]$MerchantID,
 
@@ -57,9 +57,6 @@ function New-SecretHex {
 
     $buffer = New-Object byte[] $Bytes
 
-    # Совместимый вариант для Windows PowerShell 5.1 и PowerShell 7+.
-    # RandomNumberGenerator::Fill есть не во всех версиях .NET,
-    # поэтому используем Create().GetBytes(...).
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
     try {
         $rng.GetBytes($buffer)
@@ -188,7 +185,6 @@ $nameSql = Sql-Escape $Name
 $webhookURLSql = Sql-Escape $WebhookURL
 $roleSql = Sql-Escape $Role
 
-# Схема создаётся/дополняется безопасно: это удобно, если таблица merchants уже была создана старой версией проекта.
 $schemaSql = @"
 CREATE TABLE IF NOT EXISTS merchants (
     id BIGSERIAL PRIMARY KEY

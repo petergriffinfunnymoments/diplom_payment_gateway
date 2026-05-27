@@ -20,10 +20,9 @@ type errorResponse struct {
 	Message string `json:"message"`
 }
 
-// NewCreatePaymentHandler создаёт go-kit HTTP handler для POST /payments.
 func NewCreatePaymentHandler(
 	orchestrator contracts.PaymentOrchestrator,
-	logger interface{}, // для диплома оставим сигнатуру; позже заменим на contracts.EventLogger/kit/log.Logger
+	logger interface{},
 ) http.Handler {
 	_ = logger
 	eventLogger, _ := logger.(contracts.EventLogger)
@@ -42,7 +41,6 @@ func NewCreatePaymentHandler(
 			return errorResponse{Code: dto.ErrorForbidden, Message: "payment creation is not allowed for this role or merchant"}, nil
 		}
 
-		// На старте оркестратор может быть заглушкой — вернём 501 на уровне транспорта.
 		resp, err := orchestrator.CreatePayment(ctx, req)
 		if err != nil {
 			return errorResponse{Code: dto.ErrorNotImplemented, Message: err.Error()}, err
@@ -73,8 +71,6 @@ func NewCreatePaymentHandler(
 		return json.NewEncoder(w).Encode(response)
 	}
 
-	// Для простоты: маппим ошибку оркестратора в 501, decoding-ошибки — в 400.
-	// Детальную маппинг-таблицу сделаем позже.
 	serverBefore := httptransport.ServerBefore(func(ctx context.Context, r *http.Request) context.Context {
 		return ctx
 	})
@@ -90,7 +86,7 @@ func NewCreatePaymentHandler(
 		decodeCreatePaymentRequest,
 		encodeCreatePaymentResponse,
 		serverBefore,
-		// ServerAfter не содержит duration; логирование оставим позже.
+
 		serverAfter,
 	)
 
@@ -98,15 +94,12 @@ func NewCreatePaymentHandler(
 		start := time.Now()
 		defer func() { _ = start }()
 
-		// Валидация метода.
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			_ = json.NewEncoder(w).Encode(errorResponse{Code: dto.ErrorMethodNotAllowed, Message: "use POST"})
 			return
 		}
 
-		// go-kit server сам вызовет decode/encode; но если декодер вернёт error — это попадёт в endpoint error путь.
-		// Поэтому перехватываем статус только по типу ответа, если endpoint вернёт error.
 		h.ServeHTTP(w, r)
 	})
 }

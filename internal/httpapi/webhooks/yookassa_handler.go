@@ -67,8 +67,6 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// ЮKassa рекомендует проверять актуальный статус объекта. Если есть ключи,
-	// дополнительно получаем платеж напрямую по API и используем его как источник истины.
 	payment := notification.Object
 	if verified, err := h.fetchPayment(r.Context(), notification.Object.ID); err == nil && verified.ID != "" {
 		payment = verified
@@ -79,8 +77,7 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	idempotencyKey := strings.TrimSpace(payment.Metadata.IdempotencyKey)
 
 	if merchantID == "" || paymentID == "" || idempotencyKey == "" {
-		// Уведомление настоящее по формату, но мы не можем связать его с внутренней транзакцией.
-		// Возвращаем 200, чтобы ЮKassa не присылала одно и то же уведомление повторно.
+
 		logCtx, cancel := ctxWithTimeout(r.Context())
 		defer cancel()
 		_ = h.log(logCtx, contracts.PaymentEvent{
@@ -201,7 +198,6 @@ func (h *YooKassaWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Для ЮKassa важно вернуть HTTP 200. Тело ответа она игнорирует.
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }

@@ -13,9 +13,9 @@ import (
 
 type InMemoryTransactionStore struct {
 	mu sync.RWMutex
-	// key: merchant_id + ":" + idempotency_key
+
 	byIdempotency map[string]storedTx
-	// key: merchant_id + ":" + payment_id
+
 	byPaymentID map[string]storedTx
 	refunds     map[string]storedRefund
 }
@@ -53,7 +53,7 @@ func (s *InMemoryTransactionStore) Save(
 	if merchantID == "" || idempotencyKey == "" {
 		return errors.New("merchantID and idempotencyKey are required")
 	}
-	// В дипломе: здесь можно валидировать payloadJSON (json.Valid). Для каркаса — сделаем базовую проверку.
+
 	if payloadJSON != "" {
 		payloadJSON = dto.SanitizePaymentPayloadJSON(payloadJSON)
 		var tmp interface{}

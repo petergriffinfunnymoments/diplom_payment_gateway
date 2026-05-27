@@ -102,7 +102,7 @@ Table merchant_payment_routes {
   id bigint [pk, increment]
   merchant_id text [not null]
   payment_method text [not null]
-  provider text [not null, note: 'yookassa, robokassa, payanyway, simulated, digital_ruble и т.п.']
+  provider text [not null, note: 'yookassa, payanyway, simulated, digital_ruble и т.п.']
   payment_system text [not null]
   priority integer [not null, default: 100]
   active boolean [not null, default: true]

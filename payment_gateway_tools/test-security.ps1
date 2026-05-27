@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$InstallMissingTools,
     [switch]$RequireGovulncheck,
     [switch]$SkipGovulncheck,

@@ -168,8 +168,6 @@ func (l *PostgresEventLogger) Log(ctx context.Context, event contracts.PaymentEv
 		event.Context[k] = MaskSensitive(v)
 	}
 
-	// На всякий случай создаём неизвестные service/event, чтобы логирование не ломало платежный процесс
-	// при появлении нового типа события.
 	if err := l.ensureDictionaryValues(ctx, event); err != nil {
 		return err
 	}

@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// PaymentMethodType определяет тип способа оплаты.
 type PaymentMethodType string
 
 const (
@@ -16,16 +15,13 @@ const (
 	PaymentMethodDigitalRuble  PaymentMethodType = "Цифровой рубль"
 )
 
-// PaymentCurrency — валютный код (для примера используется RUB).
 type PaymentCurrency string
 
-// AmountMoney — сумма платежа.
 type AmountMoney struct {
 	Value    float64         `json:"value"`
 	Currency PaymentCurrency `json:"currency"`
 }
 
-// PaymentItem описывает позицию заказа для платежных систем, которым нужна номенклатура.
 type PaymentItem struct {
 	Name          string  `json:"name"`
 	Price         float64 `json:"price"`
@@ -37,15 +33,11 @@ type PaymentItem struct {
 	IDInternal    string  `json:"id_internal,omitempty"`
 }
 
-// DigitalRubleData содержит дополнительные параметры сценария цифрового рубля.
-// В прототипе они используются эмулятором платформы для проверки маркировки денег
-// и учебного смарт-контракта целевого расходования.
 type DigitalRubleData struct {
 	SmartContractID    string `json:"smart_contract_id,omitempty"`
 	RequireMarkedMoney bool   `json:"require_marked_money,omitempty"`
 }
 
-// CustomerData — данные клиента (в зависимости от типа оплаты набор полей может отличаться).
 type CustomerData struct {
 	Email                  string `json:"email,omitempty"`
 	Phone                  string `json:"phone,omitempty"`
@@ -58,12 +50,10 @@ type CustomerData struct {
 	DigitalRubleIdentifier string `json:"digital_ruble_identifier,omitempty"`
 }
 
-// PaymentMethodData — данные способа оплаты.
 type PaymentMethodData struct {
 	Type PaymentMethodType `json:"type"`
 }
 
-// CreatePaymentRequest — запрос на создание платежа.
 type CreatePaymentRequest struct {
 	MerchantID     string `json:"merchant_id"`
 	IdempotencyKey string `json:"idempotency_key"`
@@ -83,7 +73,6 @@ type PaymentInfo struct {
 	Description       string            `json:"description"`
 }
 
-// PaymentResponse — ответ платежного шлюза.
 type PaymentResponse struct {
 	ID             string `json:"id"`
 	MerchantID     string `json:"merchant_id"`

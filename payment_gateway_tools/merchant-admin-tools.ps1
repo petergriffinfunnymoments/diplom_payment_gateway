@@ -1,7 +1,4 @@
-# Подключение:
-# . .\payment_gateway_tools\merchant-admin-tools.ps1
-# Требует $env:DATABASE_URL и переменную $PSQL из pg-tools.ps1
-
+﻿
 function pgmerchants {
     param([int]$Limit = 20)
 

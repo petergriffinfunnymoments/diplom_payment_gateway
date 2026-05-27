@@ -31,7 +31,7 @@ func (c *simpleCallbackHandler) HandleCallback(
 
 	switch status {
 	case statusCaptured, statusPending, statusCaptureRequested:
-		// Не считаем PENDING ошибкой: внешний провайдер может вернуть ссылку на оплату.
+
 	case statusDeclined, statusCancelled:
 		fraudCheck = "PASSED"
 		msg := adapterResult.ErrorMessage

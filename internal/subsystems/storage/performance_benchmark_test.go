@@ -22,7 +22,7 @@ func BenchmarkInMemoryTransactionReport1000Rows(b *testing.B) {
 		system := "YOOKASSA"
 		if i%3 == 1 {
 			status = string(dto.StatusPending)
-			system = "ROBOKASSA"
+			system = "DIGITAL_RUBLE"
 		}
 		if i%3 == 2 {
 			status = string(dto.StatusDeclined)

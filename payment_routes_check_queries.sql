@@ -1,5 +1,4 @@
--- Все правила маршрутизации
-SELECT
+﻿SELECT
   id,
   merchant_id,
   payment_method,
@@ -11,7 +10,6 @@ SELECT
 FROM merchant_payment_routes
 ORDER BY merchant_id, payment_method, priority, id;
 
--- Активный маршрут для конкретного мерчанта и способа оплаты
 SELECT
   merchant_id,
   payment_method,

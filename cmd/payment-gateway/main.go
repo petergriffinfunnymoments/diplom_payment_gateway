@@ -38,7 +38,7 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	} else if !strings.Contains(addr, ":") {
-		// поддержка "8080" вместо ":8080"
+
 		addr = ":" + addr
 	}
 
@@ -194,7 +194,6 @@ func main() {
 	mux.Handle("/refunds/", authenticated(refundHandler))
 	mux.Handle("/reports/transactions", authenticated(reports.NewTransactionReportHandlerWithLogger(reportStore, eventLogger)))
 	mux.Handle("/webhooks/yookassa", providerWebhook(webhooks.NewYooKassaWebhookHandlerWithNotifications(store, eventLogger, notificationService)))
-	mux.Handle("/webhooks/robokassa", providerWebhook(webhooks.NewRobokassaWebhookHandler(store, eventLogger, notificationService)))
 	mux.Handle("/webhooks/payanyway", providerWebhook(webhooks.NewPayAnyWayWebhookHandler(store, eventLogger, notificationService)))
 	digitalRubleSandboxHandler := providerWebhook(webhooks.NewDigitalRubleSandboxHandler(store, eventLogger, notificationService))
 	mux.Handle("/sandbox/digital-ruble/scan", digitalRubleSandboxHandler)

@@ -1,5 +1,4 @@
--- Список мерчантов
-SELECT
+﻿SELECT
     merchant_id,
     name,
     left(api_key_hash, 12) || '...' AS api_key_hash_preview,
@@ -9,7 +8,6 @@ SELECT
 FROM merchants
 ORDER BY created_at DESC;
 
--- Проверить, что активен демонстрационный мерчант
 SELECT
     merchant_id,
     active

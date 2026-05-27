@@ -37,7 +37,7 @@ POST /payments
 Финальный статус может обновляться webhook-ом от внешнего провайдера:
 
 ```text
-provider webhook -> /webhooks/yookassa, /webhooks/robokassa, /webhooks/payanyway или /webhooks/digital-ruble -> DB -> merchant notification
+provider webhook -> /webhooks/yookassa, /webhooks/payanyway или /webhooks/digital-ruble -> DB -> merchant notification
 ```
 
 ## Быстрый запуск
@@ -82,12 +82,6 @@ $env:MERCHANT_WEBHOOK_SECRET="demo_secret"
 ```powershell
 $env:YOOKASSA_SHOP_ID="..."
 $env:YOOKASSA_SECRET_KEY="..."
-
-$env:ROBOKASSA_MERCHANT_LOGIN="..."
-$env:ROBOKASSA_TEST_PASSWORD1="..."
-$env:ROBOKASSA_TEST_PASSWORD2="..."
-$env:ROBOKASSA_TEST_MODE="true"
-$env:ROBOKASSA_HASH_ALGORITHM="md5"
 ```
 
 ## Postman
@@ -346,7 +340,6 @@ limit
 
 ```text
 POST /webhooks/yookassa
-POST /webhooks/robokassa
 POST /webhooks/payanyway
 POST /webhooks/digital-ruble
 POST /sandbox/digital-ruble/scan
@@ -473,7 +466,7 @@ pgmerchantrole admin_1 admin
 ```powershell
 . .\payment_gateway_tools\payment-route-tools.ps1
 pgrouteadd "merchant_12345" "Цифровой рубль" digital_ruble 1 DIGITAL_RUBLE
-pgrouteadd "merchant_12345" "СБП" robokassa 1 ROBOKASSA
+pgrouteadd "merchant_12345" "СБП" payanyway 1 PAYANYWAY
 ```
 
 Посмотреть маршруты:
@@ -497,7 +490,6 @@ pgroutedisable "merchant_12345" "Банковская карта" yookassa
 
 ```text
 yookassa
-robokassa
 payanyway
 digital_ruble
 simulated
@@ -507,39 +499,9 @@ simulated
 
 YooKassa создает redirect-платеж и возвращает `payment_url`; финальный статус обновляется через `/webhooks/yookassa`.
 
-Robokassa создает ссылку на платежную форму и возвращает `payment_url`; при тестовом режиме в ссылку добавляется `IsTest=1`. Финальный статус успешного платежа обновляется через `Result URL` `/webhooks/robokassa`.
-
 PayAnyWay создает ссылку на платежную форму MONETA.Assistant и возвращает `payment_url`; при тестовом режиме в ссылку добавляется `MNT_TEST_MODE=1`. Финальный статус успешного платежа обновляется через `Pay URL` `/webhooks/payanyway`.
 
 Digital Ruble является эмуляционным адаптером банка-участника, потому что реальная платформа цифрового рубля не предоставляет публичный sandbox API для произвольного подключения.
-
-### Robokassa test mode
-
-В кабинете Robokassa в технических настройках магазина задай отдельные тестовые пароли и Result URL:
-
-```text
-Result URL: https://<public-url>/webhooks/robokassa
-Метод Result URL: POST
-Алгоритм подписи: MD5
-```
-
-Локальные переменные:
-
-```powershell
-$env:ROBOKASSA_MERCHANT_LOGIN="..."
-$env:ROBOKASSA_TEST_PASSWORD1="..."
-$env:ROBOKASSA_TEST_PASSWORD2="..."
-$env:ROBOKASSA_TEST_MODE="true"
-$env:ROBOKASSA_HASH_ALGORITHM="md5"
-```
-
-Для тестового платежа через маршрутизатор удобно направить СБП в Robokassa:
-
-```powershell
-pgrouteadd "merchant_12345" "СБП" robokassa 1 ROBOKASSA
-```
-
-Тестовые платежи Robokassa могут не отображаться в поиске операций личного кабинета; проверяй результат по webhook-у, логам и `GET /payments/{payment_id}`.
 
 ### PayAnyWay test mode
 
@@ -1037,7 +999,6 @@ PUBLIC_URL в run.local.ps1
 PAYMENT_RETURN_URL
 MERCHANT_WEBHOOK_URL
 YooKassa webhook URL: /webhooks/yookassa
-Robokassa Result URL: /webhooks/robokassa
 PayAnyWay Pay URL: /webhooks/payanyway
 Postman base_url
 ```
@@ -1091,7 +1052,7 @@ backend всё ещё принимает PAN/CVV во входном JSON для
 .\payment_gateway_tools\test-integration.ps1
 ```
 
-Покрываются orchestrator, webhook-и, отчеты и in-memory хранилище. Эти тесты используют тестовые заглушки и не требуют реальных YooKassa, Robokassa, PayAnyWay или PostgreSQL.
+Покрываются orchestrator, webhook-и, отчеты и in-memory хранилище. Эти тесты используют тестовые заглушки и не требуют реальных YooKassa, PayAnyWay или PostgreSQL.
 
 ### Security tests
 
@@ -1225,7 +1186,6 @@ pgctx pay_...
 pgroutes
 pgmerchant_routes merchant_12345
 pgrouteadd "merchant_12345" "Цифровой рубль" digital_ruble 1 DIGITAL_RUBLE
-pgrouteadd "merchant_12345" "СБП" robokassa 1 ROBOKASSA
 pgrouteadd "merchant_12345" "СБП" payanyway 0 PAYANYWAY
 pgroutedisable "merchant_12345" "Банковская карта" yookassa
 ```
@@ -1257,8 +1217,6 @@ https://<public-url>/webhooks/yookassa
 
 ```text
 YOOKASSA_SECRET_KEY
-ROBOKASSA_TEST_PASSWORD1
-ROBOKASSA_TEST_PASSWORD2
 PAYANYWAY_INTEGRITY_CODE
 DATABASE_URL с паролем
 ```

@@ -24,8 +24,6 @@ type statusErrorResponse struct {
 	Message string `json:"message"`
 }
 
-// NewGetPaymentStatusHandler создаёт HTTP handler для GET /payments/{payment_id}.
-// MerchantID передаётся query-параметром: /payments/pay_123?merchant_id=merchant_12345.
 func NewGetPaymentStatusHandler(store contracts.TransactionStore) http.Handler {
 	return NewGetPaymentStatusHandlerWithLogger(store, nil)
 }

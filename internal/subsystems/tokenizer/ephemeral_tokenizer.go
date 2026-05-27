@@ -19,7 +19,6 @@ func (t *EphemeralTokenizer) Tokenize(ctx context.Context, req dto.CreatePayment
 	_ = ctx
 	_ = req
 
-	// Генерирует одноразовый внутренний токен без сохранения в хранилище.
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err

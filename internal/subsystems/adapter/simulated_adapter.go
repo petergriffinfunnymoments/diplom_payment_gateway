@@ -25,7 +25,6 @@ func (a *SimulatedAdapter) Send(ctx context.Context, token string, req dto.Creat
 	_ = ctx
 	_ = req
 
-	// Локальная эмуляция успешного ответа платежного провайдера.
 	_ = time.Now()
 
 	extID := fmt.Sprintf("ext_%d", time.Now().UnixNano())

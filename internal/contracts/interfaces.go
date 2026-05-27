@@ -7,8 +7,6 @@ import (
 	"payment-gateway/internal/dto"
 )
 
-// -------------------- Shared / common types --------------------
-
 type PaymentEventType string
 
 const (
@@ -55,42 +53,34 @@ type PaymentEvent struct {
 	Context        map[string]string
 }
 
-// -------------------- Subsystems (9) --------------------
-
 type PaymentValidator interface {
-	// Validate проверяет корректность входных данных и при необходимости нормализует.
-	// Возвращает валидные данные, готовые к антифроду/оркестратору.
 	Validate(ctx context.Context, req dto.CreatePaymentRequest) (dto.CreatePaymentRequest, error)
 }
 
 type AntiFraud interface {
-	// Check выполняет антифрод-проверки и возвращает результат.
 	Check(ctx context.Context, req dto.CreatePaymentRequest) (AntiFraudResult, error)
 }
 
 type AntiFraudResult struct {
-	Result string `json:"result"` // например: PASSED / BLOCKED
+	Result string `json:"result"`
 	Reason string `json:"reason,omitempty"`
 }
 
 type Tokenizer interface {
-	// Tokenize преобразует платежные данные в токен для передачи в платежную систему.
 	Tokenize(ctx context.Context, req dto.CreatePaymentRequest) (token string, err error)
 }
 
 type PaymentAdapter interface {
-	// Send отправляет токен (или пакет данных) в ЭПС.
-	// Возвращает статус транзакции, внешний id, payment_system и причину ошибки при необходимости.
 	Send(ctx context.Context, token string, req dto.CreatePaymentRequest) (AdapterResult, error)
 }
 
 type AdapterResult struct {
 	ExternalTransactionID string
 	PaymentSystem         string
-	Status                string // например: CAPTURED / FAILED / PENDING
-	ProviderStatus        string // исходный статус внешней платежной системы
-	ErrorCode             string // внутренний код ошибки шлюза, если адаптер уже смог его классифицировать
-	PaymentURL            string // ссылка на платежную форму, если провайдер требует подтверждение пользователя
+	Status                string
+	ProviderStatus        string
+	ErrorCode             string
+	PaymentURL            string
 	QRID                  string
 	QRPayload             string
 	QRImageDataURI        string
@@ -133,24 +123,18 @@ type RefundResult struct {
 }
 
 type Notifications interface {
-	// Notify отправляет результат в API-шлюз (для передачи интернет-магазину).
 	Notify(ctx context.Context, resp dto.PaymentResponse) error
 }
 
 type EventLogger interface {
-	// Log сохраняет событие в логирование/хранилище (модуль логирования).
 	Log(ctx context.Context, event PaymentEvent) error
 }
 
 type TransactionStore interface {
-	// Save создаёт/обновляет запись транзакции в БД.
-	// Для каркаса: храним итог и текущее состояние.
 	Save(ctx context.Context, merchantID string, paymentID string, idempotencyKey string, status string, payloadJSON string, updatedAt time.Time) error
 
-	// GetByIdempotencyKey возвращает текущую транзакцию, если idempotencyKey уже был использован.
 	GetByIdempotencyKey(ctx context.Context, merchantID string, idempotencyKey string) (status string, payloadJSON string, found bool, err error)
 
-	// GetByPaymentID возвращает последнее сохранённое состояние платежа по payment_id.
 	GetByPaymentID(ctx context.Context, merchantID string, paymentID string) (status string, payloadJSON string, found bool, err error)
 }
 
@@ -165,7 +149,6 @@ type RefundStore interface {
 	ListRefundsByPaymentID(ctx context.Context, merchantID string, paymentID string) ([]dto.Refund, error)
 }
 
-// PaymentRoute описывает правило выбора внешнего платежного провайдера.
 type PaymentRoute struct {
 	MerchantID    string
 	PaymentMethod dto.PaymentMethodType
@@ -174,12 +157,9 @@ type PaymentRoute struct {
 	Priority      int
 }
 
-// PaymentRouteStore хранит правила маршрутизации платежей для мерчантов.
 type PaymentRouteStore interface {
 	GetActiveRoute(ctx context.Context, merchantID string, paymentMethod dto.PaymentMethodType) (route PaymentRoute, found bool, err error)
 }
-
-// -------------------- Orchestrator "containers" (5) --------------------
 
 type TransactionStateManager interface {
 	GetStatus(ctx context.Context, merchantID, paymentID string) (status string, err error)
@@ -187,36 +167,26 @@ type TransactionStateManager interface {
 }
 
 type PaymentRouter interface {
-	// Route определяет, какой адаптер/ЭПС использовать (по антифроду, типу оплаты, политике и т.д.)
-	// Для каркаса возвращаем paymentSystem и "key" адаптера.
 	Route(ctx context.Context, req dto.CreatePaymentRequest, fraud AntiFraudResult) (paymentSystem string, adapterKey string, err error)
 }
 
 type WorkflowEngine interface {
-	// StartSession создаёт сессию транзакции (жизненный цикл).
 	StartSession(ctx context.Context, req dto.CreatePaymentRequest) (sessionID string, err error)
 
-	// CompleteSession завершает сессию.
 	CompleteSession(ctx context.Context, sessionID string, finalStatus string) error
 }
 
 type RetryHandler interface {
-	// ShouldRetry отвечает на вопрос, нужно ли делать повтор.
 	ShouldRetry(ctx context.Context, adapterResult AdapterResult, retryCount int) bool
 
-	// NextRetryCount возвращает новое значение счетчика.
 	NextRetryCount(current int) int
 
-	// RetryAfter задаёт (ориентировочно) задержку между повторами.
 	RetryAfter(attempt int) time.Duration
 }
 
 type CallbackHandler interface {
-	// HandleCallback преобразует результат адаптера в response для API.
 	HandleCallback(ctx context.Context, adapterResult AdapterResult, req dto.CreatePaymentRequest, token string) (dto.PaymentResponse, error)
 }
-
-// -------------------- Orchestrator main facade --------------------
 
 type PaymentOrchestrator interface {
 	CreatePayment(ctx context.Context, req dto.CreatePaymentRequest) (dto.PaymentResponse, error)

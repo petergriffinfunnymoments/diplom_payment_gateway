@@ -87,7 +87,6 @@ CREATE INDEX IF NOT EXISTS idx_payment_refunds_merchant_payment
 	return err
 }
 
-// NewPostgresTransactionStoreAsContract адаптирует реализацию под интерфейс TransactionStore.
 func NewPostgresTransactionStoreAsContract(ctx context.Context, dsn string) (contracts.TransactionStore, error) {
 	s, err := NewPostgresTransactionStore(ctx, dsn)
 	if err != nil {

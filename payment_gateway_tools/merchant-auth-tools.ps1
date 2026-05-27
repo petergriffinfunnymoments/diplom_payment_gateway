@@ -1,7 +1,4 @@
-# Подключать после pg-tools.ps1:
-# . .\payment_gateway_tools\pg-tools.ps1
-# . .\payment_gateway_tools\merchant-auth-tools.ps1
-
+﻿
 function pgmerchants {
     & $PSQL $env:PGURL -c "
 SELECT

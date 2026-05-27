@@ -1,5 +1,4 @@
--- Последние события логирования
-SELECT
+﻿SELECT
     le.timestamp,
     le.level,
     s.code AS service,
@@ -13,7 +12,6 @@ JOIN log_events e ON e.id = le.event_id
 ORDER BY le.timestamp DESC
 LIMIT 50;
 
--- История одного платежа: замени pay_123 на свой payment_id
 SELECT
     le.timestamp,
     le.level,
@@ -27,7 +25,6 @@ JOIN log_events e ON e.id = le.event_id
 WHERE le.payment_id = 'pay_123'
 ORDER BY le.timestamp;
 
--- Контекст событий одного платежа: замени pay_123 на свой payment_id
 SELECT
     le.timestamp,
     e.code AS event,
@@ -39,7 +36,6 @@ LEFT JOIN log_context lc ON lc.log_entry_id = le.id
 WHERE le.payment_id = 'pay_123'
 ORDER BY le.timestamp, lc.key;
 
--- Все ошибки
 SELECT
     le.timestamp,
     s.code AS service,

@@ -9,7 +9,6 @@ import (
 
 type NoOpNotifications struct{}
 
-// NewNoOpNotifications создаёт реализацию уведомлений, которая намеренно ничего не отправляет.
 func NewNoOpNotifications() contracts.Notifications {
 	return &NoOpNotifications{}
 }
