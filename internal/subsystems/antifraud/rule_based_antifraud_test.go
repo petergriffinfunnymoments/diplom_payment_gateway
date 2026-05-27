@@ -89,6 +89,51 @@ func TestOPAPolicyBlocksDeniedEmail(t *testing.T) {
 	}
 }
 
+func TestCastleDisposableEmailDomainReviewsPayment(t *testing.T) {
+	af := NewRuleBasedAntiFraud()
+
+	res, err := af.Check(context.Background(), testPaymentRequest("pay_disposable_", 1, "4111111111111111", "buyer@yopmail.com", "+79991234567", ""))
+	if err != nil {
+		t.Fatalf("check failed: %v", err)
+	}
+
+	if res.Result != ResultReview {
+		t.Fatalf("expected %s, got %s (%s)", ResultReview, res.Result, res.Reason)
+	}
+	if !strings.Contains(res.Reason, "Castle list") {
+		t.Fatalf("expected Castle disposable domain reason, got %q", res.Reason)
+	}
+	if strings.Contains(res.Reason, "OPA policy requires review") {
+		t.Fatalf("expected disposable domain to be scored only once, got %q", res.Reason)
+	}
+}
+
+func TestCastleDisposableEmailSubdomainReviewsPayment(t *testing.T) {
+	af := NewRuleBasedAntiFraud()
+
+	res, err := af.Check(context.Background(), testPaymentRequest("pay_sub_disposable_", 1, "4111111111111111", "buyer@sub.mailinator.com", "+79991234567", ""))
+	if err != nil {
+		t.Fatalf("check failed: %v", err)
+	}
+
+	if res.Result != ResultReview {
+		t.Fatalf("expected %s, got %s (%s)", ResultReview, res.Result, res.Reason)
+	}
+}
+
+func TestRegularEmailPassesDisposableDomainCheck(t *testing.T) {
+	af := NewRuleBasedAntiFraud()
+
+	res, err := af.Check(context.Background(), testPaymentRequest("pay_regular_email_", 1, "4111111111111111", "buyer@gmail.com", "+79991234567", ""))
+	if err != nil {
+		t.Fatalf("check failed: %v", err)
+	}
+
+	if res.Result != ResultPassed {
+		t.Fatalf("expected %s, got %s (%s)", ResultPassed, res.Result, res.Reason)
+	}
+}
+
 func testPaymentRequest(prefix string, idx int, card string, email string, phone string, wallet string) dto.CreatePaymentRequest {
 	return dto.CreatePaymentRequest{
 		MerchantID:     "merchant_12345",

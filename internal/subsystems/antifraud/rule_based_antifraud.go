@@ -310,11 +310,8 @@ func (a *RuleBasedAntiFraud) checkEmail(req dto.CreatePaymentRequest) fraudRuleR
 		return fraudRuleResult{Name: "suspicious_email_keyword", Score: 40, Reason: "email contains suspicious keyword"}
 	}
 
-	suspiciousDomains := []string{"mailinator.com", "tempmail.com", "10minutemail.com", "example.test"}
-	for _, domain := range suspiciousDomains {
-		if strings.HasSuffix(email, "@"+domain) {
-			return fraudRuleResult{Name: "temporary_email_domain", Score: 25, Reason: "email uses temporary or suspicious domain"}
-		}
+	if isDisposableEmail(email) {
+		return fraudRuleResult{Name: "temporary_email_domain", Score: 25, Reason: "email uses disposable domain from Castle list"}
 	}
 
 	return fraudRuleResult{}

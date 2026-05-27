@@ -32,28 +32,12 @@ findings[f] {
 }
 
 findings[f] {
-	domain := suspicious_email_domains[_]
-	endswith(lower(input.email), concat("", ["@", domain]))
-	f := {
-		"result": "REVIEW",
-		"score": 35,
-		"reason": "OPA policy requires review: temporary email domain",
-	}
-}
-
-findings[f] {
 	lower(input.digital_wallet_id) == "opa_blocked_wallet"
 	f := {
 		"result": "BLOCKED",
 		"score": 100,
 		"reason": "OPA policy blocked payment: digital wallet is in deny list",
 	}
-}
-
-suspicious_email_domains := {
-	"mailinator.com",
-	"tempmail.com",
-	"10minutemail.com",
 }
 `
 
